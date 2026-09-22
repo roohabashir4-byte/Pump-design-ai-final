@@ -93,6 +93,7 @@ class PumpDesignAgent:
         query: str | None = None,
         material: str | None = None,
     ) -> dict[str, Any]:
+
         if self.rag_retriever is None:
             raise RuntimeError("No RAG retriever is configured.")
 
@@ -100,14 +101,21 @@ class PumpDesignAgent:
 
         if material:
             retrieval_query = (
-                f"{retrieval_query} {material} Hazen Williams pipe material"
+                f"{retrieval_query} "
+                f"{material} "
+                f"Hazen Williams pipe material"
             )
 
+        # IMPORTANT:
+        # Pass the structured pipe material to the RAG store.
+        # This allows the pipe engineering registry to return the
+        # applicable Hazen-Williams C value deterministically.
         raw = self.rag_retriever(
             application=application,
             service=service,
             jurisdiction=jurisdiction,
             query=retrieval_query,
+            material=material,
         )
 
         criteria: list[Criterion] = []
@@ -296,6 +304,7 @@ class PumpDesignAgent:
         self,
         args: dict[str, Any],
     ) -> dict[str, Any]:
+
         app_raw = str(
             args.get("application", "")
         ).lower().strip()
@@ -326,6 +335,7 @@ class PumpDesignAgent:
     def _tool_schemas(
         self,
     ) -> list[dict[str, Any]]:
+
         schemas = [
             {
                 "type": "function",
@@ -386,6 +396,7 @@ class PumpDesignAgent:
         name: str,
         args: dict[str, Any],
     ) -> Any:
+
         if name == "get_engineering_criteria":
             return self._rag_tool(args)
 
