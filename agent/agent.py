@@ -71,6 +71,8 @@ class PumpDesignAgent:
 
         self._state = AgentState()
 
+        self._requested_application: str | None = None
+
         self._client = client
 
         self.router = build_engineering_router(
@@ -393,10 +395,9 @@ class PumpDesignAgent:
     ) -> dict[str, Any]:
 
         app_raw = str(
-            args.get(
-                "application",
-                "",
-            )
+            args.get("application")
+            or self._requested_application
+            or ""
         ).lower().strip()
 
         application = APPLICATIONS.get(
@@ -462,9 +463,7 @@ class PumpDesignAgent:
                             },
                         },
 
-                        "required": [
-                            "application"
-                        ],
+                        "required": [],
                     },
                 },
             }
@@ -563,6 +562,13 @@ class PumpDesignAgent:
         client = self._get_client()
 
         self._state = AgentState()
+
+        self._requested_application = None
+
+        if context:
+            self._requested_application = str(
+                context.get("application") or ""
+            ).strip().upper()
 
         messages: list[
             dict[str, Any]
