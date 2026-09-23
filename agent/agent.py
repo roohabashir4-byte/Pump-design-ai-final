@@ -187,113 +187,49 @@ class PumpDesignAgent:
         # ----------------------------------------------------
 
         if material:
-
             mat = material.lower()
+            aliases = []
+            if "steel" in mat or mat in {"ms", "carbon steel", "ms/carbon steel"}:
+                aliases = ["steel pipe", "steel"]
+            elif "pvc" in mat:
+                aliases = ["pvc / cpvc", "plastic pipe", "plastic"]
+            elif "hdpe" in mat or "pe100" in mat or mat.strip() == "pe":
+                aliases = ["pe / polyethylene", "plastic pipe", "plastic"]
+            elif "ppr" in mat or "pp-r" in mat:
+                aliases = ["ppr", "pp-r", "polypropylene", "plastic pipe", "plastic"]
+            elif "copper" in mat:
+                aliases = ["copper tubing", "copper"]
+            else:
+                aliases = [mat]
 
-            aliases = [mat]
+            def material_match(c: Criterion) -> bool:
+                haystack = " ".join([
+                    c.parameter or "",
+                    c.notes or "",
+                    c.applicability or "",
+                    c.source_location or "",
+                    c.criterion_id or "",
+                    " ".join(c.retrieval_tags or []),
+                ]).lower()
+                return any(a in haystack for a in aliases)
 
-            if (
-                "steel" in mat
-                or mat in {
-                    "ms",
-                    "carbon steel",
-                    "ms/carbon steel",
-                }
-            ):
-                aliases.extend(
-                    [
-                        "steel",
-                        "steel pipe",
-                    ]
-                )
-
-            if "pvc" in mat:
-                aliases.extend(
-                    [
-                        "pvc",
-                        "plastic pipe",
-                    ]
-                )
-
-            if (
-                "hdpe" in mat
-                or "pe" in mat
-            ):
-                aliases.extend(
-                    [
-                        "pe / polyethylene",
-                        "plastic pipe",
-                        "plastic",
-                    ]
-                )
-
-            if "ppr" in mat:
-                aliases.extend(
-                    [
-                        "ppr",
-                        "pp-r",
-                        "polypropylene",
-                        "plastic pipe",
-                    ]
-                )
-
-            if "copper" in mat:
-                aliases.extend(
-                    [
-                        "copper",
-                        "copper tubing",
-                    ]
-                )
-
-            hw = [
-                c
-                for c in hw
-                if any(
-                    alias
-                    in c.applicability.lower()
-                    for alias in aliases
-                )
-            ]
+            exact = [c for c in hw if material_match(c)]
+            if exact:
+                hw = exact
 
         # ----------------------------------------------------
         # Resolve conflicting Hazen-Williams records
         # ----------------------------------------------------
 
         if len(hw) > 1:
-
-            primary = [
-                c
-                for c in hw
-                if (
-                    "PRIMARY"
-                    in c.source_status.upper()
-                )
-            ]
-
-            new_pipe = [
-                c
-                for c in primary
-                if (
-                    "new"
-                    in c.applicability.lower()
-                )
-            ]
-
-            if len(new_pipe) == 1:
-
-                hw = new_pipe
-
-            elif len(primary) == 1:
-
+            primary = [c for c in hw if "PRIMARY" in c.source_status.upper()]
+            if len(primary) == 1:
                 hw = primary
-
+            elif material and any(x in material.lower() for x in ["hdpe", "pe100", "pvc", "ppr", "pp-r", "plastic"]):
+                generic = [c for c in hw if "plastic" in " ".join(c.retrieval_tags).lower() and "PRIMARY" in c.source_status.upper()]
+                hw = generic[:1] if generic else sorted(hw, key=lambda c: ("PRIMARY" in c.source_status.upper(), c.source_status.upper()), reverse=True)[:1]
             else:
-
-                raise ValueError(
-                    "Multiple Hazen-Williams C criteria "
-                    "matched; source precedence/pipe "
-                    "condition must be resolved first."
-                )
+                hw = sorted(hw, key=lambda c: ("PRIMARY" in c.source_status.upper(), c.source_status.upper()), reverse=True)[:1]
 
         # ----------------------------------------------------
         # Resolve velocity criteria
@@ -302,62 +238,24 @@ class PumpDesignAgent:
         velocity_context: dict[str, float] = {}
 
         for c in velocity:
-
             key = c.parameter.lower()
+            if c.min_value is not None:
+                if "min_mps" in velocity_context and velocity_context["min_mps"] != c.min_value:
+                    raise ValueError("Conflicting minimum velocity criteria matched.")
+                velocity_context["min_mps"] = c.min_value
+            elif c.value is not None and key in {"min_velocity", "minimum_velocity", "velocity_min"}:
+                if "min_mps" in velocity_context and velocity_context["min_mps"] != c.value:
+                    raise ValueError("Conflicting minimum velocity criteria matched.")
+                velocity_context["min_mps"] = c.value
 
-            if (
-                key
-                in {
-                    "min_velocity",
-                    "minimum_velocity",
-                    "velocity_min",
-                }
-                and c.value is not None
-            ):
-
-                if (
-                    "min_mps"
-                    in velocity_context
-                    and velocity_context[
-                        "min_mps"
-                    ]
-                    != c.value
-                ):
-                    raise ValueError(
-                        "Conflicting minimum velocity "
-                        "criteria matched."
-                    )
-
-                velocity_context[
-                    "min_mps"
-                ] = c.value
-
-            elif (
-                key
-                in {
-                    "max_velocity",
-                    "maximum_velocity",
-                    "velocity_max",
-                }
-                and c.value is not None
-            ):
-
-                if (
-                    "max_mps"
-                    in velocity_context
-                    and velocity_context[
-                        "max_mps"
-                    ]
-                    != c.value
-                ):
-                    raise ValueError(
-                        "Conflicting maximum velocity "
-                        "criteria matched."
-                    )
-
-                velocity_context[
-                    "max_mps"
-                ] = c.value
+            if c.max_value is not None:
+                if "max_mps" in velocity_context and velocity_context["max_mps"] != c.max_value:
+                    raise ValueError("Conflicting maximum velocity criteria matched.")
+                velocity_context["max_mps"] = c.max_value
+            elif c.value is not None and key in {"max_velocity", "maximum_velocity", "velocity_max"}:
+                if "max_mps" in velocity_context and velocity_context["max_mps"] != c.value:
+                    raise ValueError("Conflicting maximum velocity criteria matched.")
+                velocity_context["max_mps"] = c.value
 
         self._state.rag_context = {
             "criteria": [
