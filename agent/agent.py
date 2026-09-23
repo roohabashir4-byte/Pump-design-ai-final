@@ -72,6 +72,7 @@ class PumpDesignAgent:
         self._state = AgentState()
 
         self._requested_application: str | None = None
+        self._current_inputs: dict[str, Any] = {}
 
         self._client = client
 
@@ -445,12 +446,26 @@ class PumpDesignAgent:
                 f"{application}"
             )
 
+        service = (
+            args.get("service")
+            or self._current_inputs.get("service")
+        )
+        jurisdiction = (
+            args.get("jurisdiction")
+            or self._current_inputs.get("jurisdiction")
+        )
+        material = (
+            args.get("material")
+            or self._current_inputs.get("pipe_material")
+        )
+        query = args.get("query") or application
+
         return self._rag_context(
             application,
-            args.get("service"),
-            args.get("jurisdiction"),
-            args.get("query"),
-            args.get("material"),
+            service,
+            jurisdiction,
+            query,
+            material,
         )
 
     def _tool_schemas(
@@ -561,6 +576,12 @@ class PumpDesignAgent:
             CalculationRequest,
         )
 
+        workflow_inputs = (
+            dict(self._current_inputs)
+            if self._current_inputs
+            else dict(args)
+        )
+
         req = CalculationRequest(
             request_id=str(
                 uuid.uuid4()
@@ -570,7 +591,7 @@ class PumpDesignAgent:
 
             tool_name=name,
 
-            inputs=args,
+            inputs=workflow_inputs,
 
             purpose=(
                 "Agent-orchestrated "
@@ -590,296 +611,218 @@ class PumpDesignAgent:
         self,
         user_request: str,
         *,
-        context: dict[str, Any]
-        | None = None,
+        context: dict[str, Any] | None = None,
     ) -> str:
-        """Run controlled RAG → workflow → final-answer orchestration."""
+        """Run exactly one RAG call, one deterministic workflow call, then one final LLM call."""
 
         client = self._get_client()
-
         self._state = AgentState()
-
         self._requested_application = None
+        self._current_inputs = {}
 
         if context:
             self._requested_application = str(
                 context.get("application") or ""
             ).strip().upper()
+            self._current_inputs = dict(
+                context.get("inputs") or {}
+            )
 
-        messages: list[
-            dict[str, Any]
-        ] = [
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT,
-            }
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": SYSTEM_PROMPT},
         ]
 
         if context:
+            messages.append({
+                "role": "system",
+                "content": (
+                    "Structured project context supplied by the user/app. "
+                    "Use these inputs exactly; do not invent missing values:\n"
+                    + json.dumps(context, default=str)
+                ),
+            })
 
-            messages.append(
-                {
-                    "role": "system",
+        messages.append({"role": "user", "content": user_request})
 
-                    "content": (
-                        "Structured project context "
-                        "supplied by the user/app:\n"
-                        + json.dumps(
-                            context,
-                            default=str,
-                        )
-                    ),
-                }
-            )
-
-        messages.append(
-            {
-                "role": "user",
-                "content": user_request,
-            }
+        # ------------------------------------------------------------
+        # STAGE 1: RAG only.
+        # ------------------------------------------------------------
+        rag_tools = self._tool_schemas(
+            include_rag=True,
+            include_workflows=False,
         )
 
-        self._state.messages = messages
-
-        rag_completed = False
-        workflow_completed = False
-
-        for round_index in range(
-            self.max_tool_rounds
-        ):
-
-            # ------------------------------------------------
-            # STAGE 1
-            # RAG must happen first.
-            # ------------------------------------------------
-
-            if not rag_completed:
-
-                tool_choice: Any = {
-                    "type": "function",
-                    "function": {
-                        "name":
-                            "get_engineering_criteria"
-                    },
-                }
-
-            # ------------------------------------------------
-            # STAGE 2
-            # Allow the LLM to select the appropriate
-            # deterministic engineering workflow.
-            # ------------------------------------------------
-
-            elif not workflow_completed:
-
-                tool_choice = "auto"
-
-            # ------------------------------------------------
-            # STAGE 3
-            # Numerical workflow has already executed.
-            # Force the model to provide the final explanation.
-            # ------------------------------------------------
-
-            else:
-
-                tool_choice = "none"
-
-            response = (
-                client.chat.completions.create(
-                    model=self.model,
-
-                    messages=messages,
-
-                    max_tokens=800,
-
-                    tools=self._tool_schemas(
-                        include_rag=not rag_completed,
-                        include_workflows=rag_completed and not workflow_completed,
-                    ),
-
-                    tool_choice=tool_choice,
-
-                    temperature=0,
-                )
-            )
-
-            message = (
-                response.choices[0].message
-            )
-
-            tool_calls = (
-                getattr(
-                    message,
-                    "tool_calls",
-                    None,
-                )
-                or []
-            )
-
-            # ------------------------------------------------
-            # Final response
-            # ------------------------------------------------
-
-            if not tool_calls:
-
-                final = (
-                    message.content
-                    or (
-                        "The deterministic engineering "
-                        "calculation completed, but the "
-                        "AI explanation was empty."
-                    )
-                )
-
-                self._state.messages = (
-                    messages
-                    + [
-                        {
-                            "role": "assistant",
-                            "content": final,
-                        }
-                    ]
-                )
-
-                return final
-
-            # ------------------------------------------------
-            # Build ONE assistant tool-call message.
-            # ------------------------------------------------
-
-            assistant_message: dict[
-                str,
-                Any,
-            ] = {
-                "role": "assistant",
-
-                "content":
-                    message.content or "",
-
-                "tool_calls": [],
-            }
-
-            tool_results_for_round = []
-
-            for call in tool_calls:
-
-                fn = call.function
-
-                call_id = call.id
-
-                try:
-
-                    args = json.loads(
-                        fn.arguments
-                        or "{}"
-                    )
-
-                    result = (
-                        self._execute_tool_call(
-                            fn.name,
-                            args,
-                        )
-                    )
-
-                    if (
-                        fn.name
-                        == "get_engineering_criteria"
-                    ):
-
-                        rag_completed = True
-
-                    else:
-
-                        workflow_completed = True
-
-                        self._state.last_tool_results.append(
-                            {
-                                "tool":
-                                    fn.name,
-
-                                "result":
-                                    result,
-                            }
-                        )
-
-                except Exception as exc:
-
-                    result = {
-                        "status":
-                            "TOOL_ERROR",
-
-                        "message":
-                            str(exc),
-                    }
-
-                assistant_message[
-                    "tool_calls"
-                ].append(
-                    {
-                        "id":
-                            call_id,
-
-                        "type":
-                            "function",
-
-                        "function": {
-                            "name":
-                                fn.name,
-
-                            "arguments":
-                                fn.arguments,
-                        },
-                    }
-                )
-
-                tool_results_for_round.append(
-                    {
-                        "tool_call_id":
-                            call_id,
-
-                        "content":
-                            json.dumps(
-                                result,
-                                default=str,
-                            ),
-                    }
-                )
-
-            # ------------------------------------------------
-            # Append assistant message ONCE.
-            #
-            # This also fixes the previous message-history
-            # construction where the same assistant message
-            # could be appended repeatedly.
-            # ------------------------------------------------
-
-            messages.append(
-                assistant_message
-            )
-
-            for tool_result in (
-                tool_results_for_round
-            ):
-
-                messages.append(
-                    {
-                        "role":
-                            "tool",
-
-                        "tool_call_id":
-                            tool_result[
-                                "tool_call_id"
-                            ],
-
-                        "content":
-                            tool_result[
-                                "content"
-                            ],
-                    }
-                )
-
-            self._state.messages = messages
-
-        raise RuntimeError(
-            "Agent exceeded the maximum tool-call rounds "
-            "without producing a final response."
+        rag_response = client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            max_tokens=500,
+            tools=rag_tools,
+            tool_choice={
+                "type": "function",
+                "function": {"name": "get_engineering_criteria"},
+            },
+            temperature=0,
+            parallel_tool_calls=False,
         )
+
+        rag_message = rag_response.choices[0].message
+        rag_calls = getattr(rag_message, "tool_calls", None) or []
+        if not rag_calls:
+            raise RuntimeError(
+                "The AI did not request engineering criteria from RAG."
+            )
+
+        rag_call = rag_calls[0]
+        if rag_call.function.name != "get_engineering_criteria":
+            raise RuntimeError(
+                f"Unexpected RAG tool call: {rag_call.function.name}"
+            )
+        if len(rag_calls) != 1:
+            raise RuntimeError(
+                "RAG stage returned multiple tool calls; exactly one is allowed."
+            )
+        rag_args = json.loads(rag_call.function.arguments or "{}")
+        rag_result = self._execute_tool_call(
+            rag_call.function.name,
+            rag_args,
+        )
+
+        messages.append({
+            "role": "assistant",
+            "content": rag_message.content or "",
+            "tool_calls": [{
+                "id": rag_call.id,
+                "type": "function",
+                "function": {
+                    "name": rag_call.function.name,
+                    "arguments": rag_call.function.arguments,
+                },
+            }],
+        })
+        messages.append({
+            "role": "tool",
+            "tool_call_id": rag_call.id,
+            "content": json.dumps(rag_result, default=str),
+        })
+
+        # ------------------------------------------------------------
+        # STAGE 2: only the workflow relevant to the selected
+        # application is exposed. This prevents tool loops and keeps
+        # the request small.
+        # ------------------------------------------------------------
+        workflow_names = {
+            "TRANSFER": "run_transfer_design",
+            "BOOSTER": "run_booster_design",
+            "SUBMERSIBLE": "run_submersible_design",
+            "HOT_WATER_RECIRCULATION": "run_hot_water_recirc_design",
+        }
+        workflow_name = workflow_names.get(
+            self._requested_application or ""
+        )
+        if not workflow_name:
+            raise RuntimeError(
+                "A valid pump application is required before running the design workflow."
+            )
+
+        all_workflow_tools = self._tool_schemas(
+            include_rag=False,
+            include_workflows=True,
+        )
+        workflow_tools = [
+            tool for tool in all_workflow_tools
+            if tool["function"]["name"] == workflow_name
+        ]
+
+        workflow_response = client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            max_tokens=500,
+            tools=workflow_tools,
+            tool_choice={
+                "type": "function",
+                "function": {"name": workflow_name},
+            },
+            temperature=0,
+            parallel_tool_calls=False,
+        )
+
+        workflow_message = workflow_response.choices[0].message
+        workflow_calls = getattr(workflow_message, "tool_calls", None) or []
+        if not workflow_calls:
+            raise RuntimeError(
+                f"The AI did not execute the required {workflow_name} workflow."
+            )
+
+        workflow_call = workflow_calls[0]
+        if workflow_call.function.name != workflow_name:
+            raise RuntimeError(
+                f"Unexpected workflow tool call: {workflow_call.function.name}"
+            )
+        if len(workflow_calls) != 1:
+            raise RuntimeError(
+                "Workflow stage returned multiple tool calls; exactly one is allowed."
+            )
+        workflow_args = json.loads(
+            workflow_call.function.arguments or "{}"
+        )
+        workflow_result = self._execute_tool_call(
+            workflow_call.function.name,
+            workflow_args,
+        )
+
+        self._state.last_tool_results.append({
+            "tool": workflow_call.function.name,
+            "result": workflow_result,
+        })
+
+        messages.append({
+            "role": "assistant",
+            "content": workflow_message.content or "",
+            "tool_calls": [{
+                "id": workflow_call.id,
+                "type": "function",
+                "function": {
+                    "name": workflow_call.function.name,
+                    "arguments": workflow_call.function.arguments,
+                },
+            }],
+        })
+        messages.append({
+            "role": "tool",
+            "tool_call_id": workflow_call.id,
+            "content": json.dumps(workflow_result, default=str),
+        })
+
+        # ------------------------------------------------------------
+        # STAGE 3: final explanation. No tools are exposed, so the
+        # model cannot start another tool-call round.
+        # ------------------------------------------------------------
+        final_response = client.chat.completions.create(
+            model=self.model,
+            messages=messages + [{
+                "role": "system",
+                "content": (
+                    "Provide the final engineering explanation now. "
+                    "Use only the deterministic workflow result and retrieved "
+                    "criteria above. Clearly state calculated results, missing "
+                    "inputs, warnings, unresolved items, and references. "
+                    "Do not invent engineering values or manufacturer data."
+                ),
+            }],
+            max_tokens=800,
+            tools=[],
+            tool_choice="none",
+            temperature=0,
+            parallel_tool_calls=False,
+        )
+
+        final_message = final_response.choices[0].message
+        final = final_message.content or (
+            "The deterministic engineering workflow completed, but the AI explanation was empty."
+        )
+
+        self._state.messages = messages + [{
+            "role": "assistant",
+            "content": final,
+        }]
+        return final
