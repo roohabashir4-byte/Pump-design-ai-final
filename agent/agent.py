@@ -528,122 +528,141 @@ class PumpDesignAgent:
         *,
         context: dict[str, Any] | None = None,
     ) -> str:
-        """Run exactly: RAG -> one deterministic workflow -> final answer."""
+        """Run deterministic RAG -> deterministic workflow -> final LLM explanation.
+
+        RAG retrieval and numerical workflow execution are controlled by the
+        application. The LLM is used only for the final engineering
+        explanation, so tool-calling failures cannot block the calculation.
+        """
         client = self._get_client()
         self._state = AgentState()
-        self._requested_application = str((context or {}).get("application") or "").strip().upper()
-        self._current_inputs = dict((context or {}).get("inputs") or {})
 
-        application = self._requested_application
+        context = context or {}
+        self._requested_application = str(
+            context.get("application") or ""
+        ).strip().upper()
+        self._current_inputs = dict(
+            context.get("inputs") or {}
+        )
+
         workflow_map = {
             "TRANSFER": "run_transfer_design",
             "BOOSTER": "run_booster_design",
             "SUBMERSIBLE": "run_submersible_design",
             "HOT_WATER_RECIRCULATION": "run_hot_water_recirculation_design",
         }
-        workflow_name = workflow_map.get(application)
+        workflow_name = workflow_map.get(
+            self._requested_application
+        )
         if not workflow_name:
-            raise ValueError(f"Unsupported pump application: {application}")
+            raise ValueError(
+                f"Unsupported pump application: "
+                f"{self._requested_application}"
+            )
 
-        # Do not send the complete structured input payload to the LLM.
-        # The deterministic workflow receives it directly from _current_inputs.
-        llm_context = {
-            "application": application,
-            "user_request": user_request,
+        # --------------------------------------------------------
+        # STAGE 1: RAG is executed directly by Python.
+        # The LLM is NOT asked to call the RAG tool.
+        # --------------------------------------------------------
+        rag_result = self._rag_context(
+            self._requested_application,
+            self._current_inputs.get("service"),
+            self._current_inputs.get("jurisdiction"),
+            self._requested_application,
+            self._current_inputs.get("pipe_material"),
+        )
+
+        # --------------------------------------------------------
+        # STAGE 2: deterministic engineering workflow.
+        # The LLM is NOT asked to call the calculation tool either.
+        # The complete structured inputs remain inside Python.
+        # --------------------------------------------------------
+        workflow_result = self._execute_tool_call(
+            workflow_name,
+            {},
+        )
+        self._state.last_tool_results.append(
+            {
+                "tool": workflow_name,
+                "result": workflow_result,
+            }
+        )
+
+        # --------------------------------------------------------
+        # STAGE 3: one small LLM call for explanation only.
+        # Send only the selected criteria and deterministic result.
+        # --------------------------------------------------------
+        compact_rag = {
+            "velocity_criteria": rag_result.get(
+                "velocity_criteria"
+            ),
+            "hazen_williams_c": rag_result.get(
+                "hazen_williams_c"
+            ),
+            "references": rag_result.get(
+                "references", []
+            ),
+            "criteria": rag_result.get(
+                "criteria", []
+            ),
         }
+
+        final_payload = {
+            "application": self._requested_application,
+            "user_request": user_request,
+            "engineering_criteria": compact_rag,
+            "deterministic_design_result": workflow_result,
+        }
+
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "system", "content": "Minimal project context:\n" + json.dumps(llm_context, default=str)},
-            {"role": "user", "content": user_request},
+            {
+                "role": "system",
+                "content": (
+                    SYSTEM_PROMPT
+                    + "\n\n"
+                    + "You are now in the final explanation stage. "
+                    + "The engineering calculation has already been executed "
+                    + "by deterministic Python tools. Do not calculate, "
+                    + "change, or invent numerical values. Explain the supplied "
+                    + "result, show important formulas/inputs when present, "
+                    + "identify missing inputs or warnings, and cite the "
+                    + "provided engineering references."
+                ),
+            },
+            {
+                "role": "user",
+                "content": json.dumps(
+                    final_payload,
+                    default=str,
+                ),
+            },
         ]
+
         self._state.messages = messages
 
-        # STAGE 1: exactly one RAG call.
-        rag_response = client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            max_tokens=300,
-            tools=self._tool_schemas(include_rag=True),
-            tool_choice={"type": "function", "function": {"name": "get_engineering_criteria"}},
-            parallel_tool_calls=False,
-            temperature=0,
-        )
-        rag_message = rag_response.choices[0].message
-        rag_calls = getattr(rag_message, "tool_calls", None) or []
-        if len(rag_calls) != 1 or rag_calls[0].function.name != "get_engineering_criteria":
-            raise RuntimeError("RAG stage did not produce exactly one engineering-criteria tool call.")
-
-        rag_call = rag_calls[0]
-        rag_args = json.loads(rag_call.function.arguments or "{}")
-        rag_result = self._execute_tool_call("get_engineering_criteria", rag_args)
-        messages.append({
-            "role": "assistant",
-            "content": rag_message.content or "",
-            "tool_calls": [{
-                "id": rag_call.id,
-                "type": "function",
-                "function": {"name": rag_call.function.name, "arguments": rag_call.function.arguments},
-            }],
-        })
-        messages.append({
-            "role": "tool",
-            "tool_call_id": rag_call.id,
-            "content": json.dumps(rag_result, default=str),
-        })
-
-        # STAGE 2: only the selected workflow is exposed, and exactly one call is allowed.
-        workflow_response = client.chat.completions.create(
-            model=self.model,
-            messages=messages + [{
-                "role": "system",
-                "content": f"Now call exactly one tool: {workflow_name}. Do not call any other tool. The application inputs are controlled by the application and must not be invented or changed.",
-            }],
-            max_tokens=300,
-            tools=self._tool_schemas(include_rag=False, workflow_name=workflow_name),
-            tool_choice={"type": "function", "function": {"name": workflow_name}},
-            parallel_tool_calls=False,
-            temperature=0,
-        )
-        workflow_message = workflow_response.choices[0].message
-        workflow_calls = getattr(workflow_message, "tool_calls", None) or []
-        if len(workflow_calls) != 1 or workflow_calls[0].function.name != workflow_name:
-            raise RuntimeError(f"Workflow stage did not produce exactly one {workflow_name} tool call.")
-
-        wf_call = workflow_calls[0]
-        wf_args = json.loads(wf_call.function.arguments or "{}")
-        workflow_result = self._execute_tool_call(workflow_name, wf_args)
-        self._state.last_tool_results.append({"tool": workflow_name, "result": workflow_result})
-        messages.append({
-            "role": "assistant",
-            "content": workflow_message.content or "",
-            "tool_calls": [{
-                "id": wf_call.id,
-                "type": "function",
-                "function": {"name": wf_call.function.name, "arguments": wf_call.function.arguments},
-            }],
-        })
-        messages.append({
-            "role": "tool",
-            "tool_call_id": wf_call.id,
-            "content": json.dumps(workflow_result, default=str),
-        })
-
-        # STAGE 3: no tools at all. This makes another tool-call round impossible.
         final_response = client.chat.completions.create(
             model=self.model,
-            messages=messages + [{
-                "role": "system",
-                "content": "Provide the final engineering design response using the deterministic result and retrieved criteria. Do not call tools. If required input is missing, clearly identify it and ask for that input. Do not invent values.",
-            }],
+            messages=messages,
             max_tokens=800,
             tools=[],
             tool_choice="none",
             temperature=0,
         )
+
         final_message = final_response.choices[0].message
         final = final_message.content
-        if not final:
-            final = "The deterministic engineering calculation completed, but the AI explanation was empty."
-        self._state.messages = messages + [{"role": "assistant", "content": final}]
-        return final
 
+        if not final:
+            final = (
+                "The deterministic engineering calculation completed, "
+                "but the AI explanation was empty."
+            )
+
+        self._state.messages = messages + [
+            {
+                "role": "assistant",
+                "content": final,
+            }
+        ]
+
+        return final
