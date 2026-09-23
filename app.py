@@ -569,21 +569,40 @@ if run:
                     }, result=result_payload, status="AI_COMPLETED")
                     st.success(f"Revision {rev} saved.")
                 else:
-                    pid, did = memory.save_project_and_design(data, application_code, result_payload)
+                    _pid, did = memory.save_project_and_design(data, application_code, result_payload)
                     st.session_state["loaded_design_id"] = did
                     st.session_state["loaded_inputs"] = data
                     st.success("Project and design saved for future reuse.")
-                design_id_for_report = st.session_state.get("loaded_design_id") or did
+            except Exception as memory_exc:
+                # Memory persistence is optional. It must never prevent the
+                # engineering result/report from being generated.
+                st.warning(f"Design completed, but memory could not be saved: {memory_exc}")
+
+            # ------------------------------------------------------------
+            # Report generation is deliberately outside the memory try/except.
+            # A memory/revision error must never suppress the report.
+            # ------------------------------------------------------------
+            try:
+                design_id_for_report = (
+                    st.session_state.get("loaded_design_id")
+                    or locals().get("did")
+                    or f"UNSAVED-{application_code}"
+                )
                 st.session_state["last_report_payload"] = build_report_payload(
                     design_id=design_id_for_report,
                     application=application_code,
                     inputs=data,
                     result=result_payload,
                     rag_context=agent.state.rag_context,
-                    project={k: data.get(k) for k in ["project_name", "location", "jurisdiction", "building_type"] if data.get(k) is not None},
+                    project={
+                        k: data.get(k)
+                        for k in ["project_name", "location", "jurisdiction", "building_type"]
+                        if data.get(k) is not None
+                    },
                 )
-            except Exception as memory_exc:
-                st.warning(f"Design completed, but memory could not be saved: {memory_exc}")
+            except Exception as report_exc:
+                st.session_state["last_report_payload"] = None
+                st.error(f"Engineering report could not be prepared: {report_exc}")
         except Exception as exc:
             st.error(f"Design run failed: {exc}")
 
