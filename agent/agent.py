@@ -35,7 +35,7 @@ class AgentState:
 class PumpDesignAgent:
     """Orchestrates LLM reasoning, RAG retrieval and deterministic workflows.
 
-    The LLM handles engineering reasoning and orchestration.
+    The LLM handles engineering reasoning and explanation.
 
     RAG supplies engineering criteria.
 
@@ -70,6 +70,7 @@ class PumpDesignAgent:
         self.max_tool_rounds = max_tool_rounds
 
         self._state = AgentState()
+
         self._requested_application: str | None = None
         self._current_inputs: dict[str, Any] = {}
 
@@ -105,6 +106,10 @@ class PumpDesignAgent:
         )
 
         return self._client
+
+    # ============================================================
+    # RAG CONTEXT
+    # ============================================================
 
     def _rag_context(
         self,
@@ -161,12 +166,20 @@ class PumpDesignAgent:
             jurisdiction=jurisdiction,
         )
 
+        # ========================================================
+        # Extract velocity criteria
+        # ========================================================
+
         velocity = [
             c
             for c in packet
             if c.criterion_type.value
             == "VELOCITY"
         ]
+
+        # ========================================================
+        # Extract Hazen-Williams C criteria
+        # ========================================================
 
         hw = [
             c
@@ -182,82 +195,341 @@ class PumpDesignAgent:
             )
         ]
 
-        # ----------------------------------------------------
+        # ========================================================
         # Resolve Hazen-Williams C by material
-        # ----------------------------------------------------
+        # ========================================================
 
         if material:
+
             mat = material.lower()
-            aliases = []
-            if "steel" in mat or mat in {"ms", "carbon steel", "ms/carbon steel"}:
-                aliases = ["steel pipe", "steel"]
-            elif "pvc" in mat:
-                aliases = ["pvc / cpvc", "plastic pipe", "plastic"]
-            elif "hdpe" in mat or "pe100" in mat or mat.strip() == "pe":
-                aliases = ["pe / polyethylene", "plastic pipe", "plastic"]
-            elif "ppr" in mat or "pp-r" in mat:
-                aliases = ["ppr", "pp-r", "polypropylene", "plastic pipe", "plastic"]
-            elif "copper" in mat:
-                aliases = ["copper tubing", "copper"]
-            else:
-                aliases = [mat]
 
-            def material_match(c: Criterion) -> bool:
-                haystack = " ".join([
-                    c.parameter or "",
-                    c.notes or "",
-                    c.applicability or "",
-                    c.source_location or "",
-                    c.criterion_id or "",
-                    " ".join(c.retrieval_tags or []),
-                ]).lower()
-                return any(a in haystack for a in aliases)
+            aliases = [mat]
 
-            exact = [c for c in hw if material_match(c)]
-            if exact:
-                hw = exact
+            if (
+                "steel" in mat
+                or mat in {
+                    "ms",
+                    "carbon steel",
+                    "ms/carbon steel",
+                }
+            ):
+                aliases.extend(
+                    [
+                        "steel",
+                        "steel pipe",
+                    ]
+                )
 
-        # ----------------------------------------------------
+            if "pvc" in mat:
+                aliases.extend(
+                    [
+                        "pvc",
+                        "plastic pipe",
+                    ]
+                )
+
+            if (
+                "hdpe" in mat
+                or "pe" in mat
+            ):
+                aliases.extend(
+                    [
+                        "pe / polyethylene",
+                        "plastic pipe",
+                        "plastic",
+                    ]
+                )
+
+            if "ppr" in mat:
+                aliases.extend(
+                    [
+                        "ppr",
+                        "pp-r",
+                        "polypropylene",
+                        "plastic pipe",
+                    ]
+                )
+
+            if "copper" in mat:
+                aliases.extend(
+                    [
+                        "copper",
+                        "copper tubing",
+                    ]
+                )
+
+            hw = [
+                c
+                for c in hw
+                if any(
+                    alias
+                    in c.applicability.lower()
+                    for alias in aliases
+                )
+            ]
+
+        # ========================================================
         # Resolve conflicting Hazen-Williams records
-        # ----------------------------------------------------
+        # ========================================================
 
         if len(hw) > 1:
-            primary = [c for c in hw if "PRIMARY" in c.source_status.upper()]
-            if len(primary) == 1:
-                hw = primary
-            elif material and any(x in material.lower() for x in ["hdpe", "pe100", "pvc", "ppr", "pp-r", "plastic"]):
-                generic = [c for c in hw if "plastic" in " ".join(c.retrieval_tags).lower() and "PRIMARY" in c.source_status.upper()]
-                hw = generic[:1] if generic else sorted(hw, key=lambda c: ("PRIMARY" in c.source_status.upper(), c.source_status.upper()), reverse=True)[:1]
-            else:
-                hw = sorted(hw, key=lambda c: ("PRIMARY" in c.source_status.upper(), c.source_status.upper()), reverse=True)[:1]
 
-        # ----------------------------------------------------
+            primary = [
+                c
+                for c in hw
+                if (
+                    "PRIMARY"
+                    in c.source_status.upper()
+                )
+            ]
+
+            new_pipe = [
+                c
+                for c in primary
+                if (
+                    "new"
+                    in c.applicability.lower()
+                )
+            ]
+
+            if len(new_pipe) == 1:
+
+                hw = new_pipe
+
+            elif len(primary) == 1:
+
+                hw = primary
+
+            else:
+
+                raise ValueError(
+                    "Multiple Hazen-Williams C criteria "
+                    "matched; source precedence/pipe "
+                    "condition must be resolved first."
+                )
+
+        # ========================================================
         # Resolve velocity criteria
-        # ----------------------------------------------------
+        #
+        # Supports:
+        #   1. min_value / max_value
+        #   2. explicit minimum velocity
+        #   3. explicit maximum velocity
+        #   4. two-element range stored in c.value
+        # ========================================================
 
         velocity_context: dict[str, float] = {}
 
         for c in velocity:
-            key = c.parameter.lower()
-            if c.min_value is not None:
-                if "min_mps" in velocity_context and velocity_context["min_mps"] != c.min_value:
-                    raise ValueError("Conflicting minimum velocity criteria matched.")
-                velocity_context["min_mps"] = c.min_value
-            elif c.value is not None and key in {"min_velocity", "minimum_velocity", "velocity_min"}:
-                if "min_mps" in velocity_context and velocity_context["min_mps"] != c.value:
-                    raise ValueError("Conflicting minimum velocity criteria matched.")
-                velocity_context["min_mps"] = c.value
 
-            if c.max_value is not None:
-                if "max_mps" in velocity_context and velocity_context["max_mps"] != c.max_value:
-                    raise ValueError("Conflicting maximum velocity criteria matched.")
-                velocity_context["max_mps"] = c.max_value
-            elif c.value is not None and key in {"max_velocity", "maximum_velocity", "velocity_max"}:
-                if "max_mps" in velocity_context and velocity_context["max_mps"] != c.value:
-                    raise ValueError("Conflicting maximum velocity criteria matched.")
-                velocity_context["max_mps"] = c.value
+            key = c.parameter.lower()
+
+            # ----------------------------------------------------
+            # Case 1:
+            # Generic velocity range stored in min/max fields
+            # ----------------------------------------------------
+
+            if key in {
+                "velocity",
+                "velocity_range",
+                "min_max_velocity",
+                "design_velocity",
+            }:
+
+                if c.min_value is not None:
+
+                    value = float(
+                        c.min_value
+                    )
+
+                    if (
+                        "min_mps"
+                        in velocity_context
+                        and velocity_context[
+                            "min_mps"
+                        ]
+                        != value
+                    ):
+                        raise ValueError(
+                            "Conflicting minimum velocity "
+                            "criteria matched."
+                        )
+
+                    velocity_context[
+                        "min_mps"
+                    ] = value
+
+                if c.max_value is not None:
+
+                    value = float(
+                        c.max_value
+                    )
+
+                    if (
+                        "max_mps"
+                        in velocity_context
+                        and velocity_context[
+                            "max_mps"
+                        ]
+                        != value
+                    ):
+                        raise ValueError(
+                            "Conflicting maximum velocity "
+                            "criteria matched."
+                        )
+
+                    velocity_context[
+                        "max_mps"
+                    ] = value
+
+            # ----------------------------------------------------
+            # Case 2:
+            # Explicit minimum velocity
+            # ----------------------------------------------------
+
+            elif key in {
+                "min_velocity",
+                "minimum_velocity",
+                "velocity_min",
+            }:
+
+                value = (
+                    c.min_value
+                    if c.min_value is not None
+                    else c.value
+                )
+
+                if value is not None:
+
+                    value = float(value)
+
+                    if (
+                        "min_mps"
+                        in velocity_context
+                        and velocity_context[
+                            "min_mps"
+                        ]
+                        != value
+                    ):
+                        raise ValueError(
+                            "Conflicting minimum velocity "
+                            "criteria matched."
+                        )
+
+                    velocity_context[
+                        "min_mps"
+                    ] = value
+
+            # ----------------------------------------------------
+            # Case 3:
+            # Explicit maximum velocity
+            # ----------------------------------------------------
+
+            elif key in {
+                "max_velocity",
+                "maximum_velocity",
+                "velocity_max",
+            }:
+
+                value = (
+                    c.max_value
+                    if c.max_value is not None
+                    else c.value
+                )
+
+                if value is not None:
+
+                    value = float(value)
+
+                    if (
+                        "max_mps"
+                        in velocity_context
+                        and velocity_context[
+                            "max_mps"
+                        ]
+                        != value
+                    ):
+                        raise ValueError(
+                            "Conflicting maximum velocity "
+                            "criteria matched."
+                        )
+
+                    velocity_context[
+                        "max_mps"
+                    ] = value
+
+            # ----------------------------------------------------
+            # Case 4:
+            # Range stored directly in c.value
+            # Example: [0.9, 1.83]
+            # ----------------------------------------------------
+
+            elif isinstance(
+                c.value,
+                list
+            ) and len(c.value) == 2:
+
+                min_value, max_value = c.value
+
+                if (
+                    isinstance(
+                        min_value,
+                        (int, float),
+                    )
+                    and isinstance(
+                        max_value,
+                        (int, float),
+                    )
+                ):
+
+                    min_value = float(
+                        min_value
+                    )
+
+                    max_value = float(
+                        max_value
+                    )
+
+                    if (
+                        "min_mps"
+                        in velocity_context
+                        and velocity_context[
+                            "min_mps"
+                        ]
+                        != min_value
+                    ):
+                        raise ValueError(
+                            "Conflicting minimum velocity "
+                            "criteria matched."
+                        )
+
+                    if (
+                        "max_mps"
+                        in velocity_context
+                        and velocity_context[
+                            "max_mps"
+                        ]
+                        != max_value
+                    ):
+                        raise ValueError(
+                            "Conflicting maximum velocity "
+                            "criteria matched."
+                        )
+
+                    velocity_context[
+                        "min_mps"
+                    ] = min_value
+
+                    velocity_context[
+                        "max_mps"
+                    ] = max_value
+
+        # ========================================================
+        # Store RAG context
+        # ========================================================
 
         self._state.rag_context = {
+
             "criteria": [
                 c.model_dump(
                     mode="json"
@@ -286,6 +558,10 @@ class PumpDesignAgent:
         }
 
         return self._state.rag_context
+
+    # ============================================================
+    # RAG TOOL
+    # ============================================================
 
     def _rag_tool(
         self,
@@ -316,11 +592,25 @@ class PumpDesignAgent:
 
         return self._rag_context(
             application,
-            args.get("service") or self._current_inputs.get("service"),
-            args.get("jurisdiction") or self._current_inputs.get("jurisdiction"),
-            args.get("query") or application,
-            args.get("material") or self._current_inputs.get("pipe_material"),
+            args.get("service")
+            or self._current_inputs.get(
+                "service"
+            ),
+            args.get("jurisdiction")
+            or self._current_inputs.get(
+                "jurisdiction"
+            ),
+            args.get("query")
+            or application,
+            args.get("material")
+            or self._current_inputs.get(
+                "pipe_material"
+            ),
         )
+
+    # ============================================================
+    # TOOL SCHEMAS
+    # ============================================================
 
     def _tool_schemas(
         self,
@@ -328,43 +618,70 @@ class PumpDesignAgent:
         include_rag: bool = True,
         workflow_name: str | None = None,
     ) -> list[dict[str, Any]]:
+
         schemas: list[dict[str, Any]] = []
 
         if include_rag:
-            schemas.append({
-                "type": "function",
-                "function": {
-                    "name": "get_engineering_criteria",
-                    "description": RAG_TOOL_DESCRIPTION,
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "application": {"type": "string"},
-                            "service": {"type": "string"},
-                            "jurisdiction": {"type": "string"},
-                            "query": {"type": "string"},
-                            "material": {"type": "string"},
+
+            schemas.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_engineering_criteria",
+                        "description": RAG_TOOL_DESCRIPTION,
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "application": {
+                                    "type": "string"
+                                },
+                                "service": {
+                                    "type": "string"
+                                },
+                                "jurisdiction": {
+                                    "type": "string"
+                                },
+                                "query": {
+                                    "type": "string"
+                                },
+                                "material": {
+                                    "type": "string"
+                                },
+                            },
+                            "required": [],
                         },
-                        "required": [],
                     },
-                },
-            })
+                }
+            )
 
         if workflow_name:
-            tool = self.router.get(workflow_name)
-            schemas.append({
-                "type": "function",
-                "function": {
-                    "name": workflow_name,
-                    "description": tool.description,
-                    "parameters": tool.input_schema or {
-                        "type": "object",
-                        "additionalProperties": True,
+
+            tool = self.router.get(
+                workflow_name
+            )
+
+            schemas.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": workflow_name,
+                        "description": tool.description,
+                        "parameters": (
+                            tool.input_schema
+                            or {
+                                "type": "object",
+                                "additionalProperties": True,
+                            }
+                        ),
                     },
-                },
-            })
+                }
+            )
 
         return schemas
+
+    # ============================================================
+    # EXECUTE TOOL CALL
+    # ============================================================
 
     def _execute_tool_call(
         self,
@@ -374,7 +691,9 @@ class PumpDesignAgent:
 
         if name == "get_engineering_criteria":
 
-            return self._rag_tool(args)
+            return self._rag_tool(
+                args
+            )
 
         if (
             name
@@ -396,6 +715,7 @@ class PumpDesignAgent:
         )
 
         req = CalculationRequest(
+
             request_id=str(
                 uuid.uuid4()
             ),
@@ -404,7 +724,13 @@ class PumpDesignAgent:
 
             tool_name=name,
 
-            inputs=(dict(self._current_inputs) if self._current_inputs else args),
+            inputs=(
+                dict(
+                    self._current_inputs
+                )
+                if self._current_inputs
+                else args
+            ),
 
             purpose=(
                 "Agent-orchestrated "
@@ -420,65 +746,109 @@ class PumpDesignAgent:
             mode="json"
         )
 
+    # ============================================================
+    # MAIN RUN
+    # ============================================================
+
     def run(
         self,
         user_request: str,
         *,
         context: dict[str, Any] | None = None,
     ) -> str:
-        """Run deterministic RAG -> deterministic workflow -> final LLM explanation.
+        """Run deterministic RAG -> workflow -> final LLM explanation.
 
-        RAG retrieval and numerical workflow execution are controlled by the
-        application. The LLM is used only for the final engineering
-        explanation, so tool-calling failures cannot block the calculation.
+        RAG retrieval and numerical workflow execution are controlled by
+        Python. The LLM is used only for the final engineering explanation,
+        so model tool-calling behavior cannot block the calculation.
         """
+
         client = self._get_client()
+
         self._state = AgentState()
 
         context = context or {}
+
         self._requested_application = str(
-            context.get("application") or ""
+            context.get(
+                "application"
+            )
+            or ""
         ).strip().upper()
+
         self._current_inputs = dict(
-            context.get("inputs") or {}
+            context.get(
+                "inputs"
+            )
+            or {}
         )
 
         workflow_map = {
-            "TRANSFER": "run_transfer_design",
-            "BOOSTER": "run_booster_design",
-            "SUBMERSIBLE": "run_submersible_design",
-            "HOT_WATER_RECIRCULATION": "run_hot_water_recirculation_design",
+
+            "TRANSFER":
+                "run_transfer_design",
+
+            "BOOSTER":
+                "run_booster_design",
+
+            "SUBMERSIBLE":
+                "run_submersible_design",
+
+            "HOT_WATER_RECIRCULATION":
+                "run_hot_water_recirculation_design",
         }
+
         workflow_name = workflow_map.get(
             self._requested_application
         )
+
         if not workflow_name:
+
             raise ValueError(
                 f"Unsupported pump application: "
                 f"{self._requested_application}"
             )
 
-        # --------------------------------------------------------
-        # STAGE 1: RAG is executed directly by Python.
+        # ========================================================
+        # STAGE 1
+        # RAG retrieval
+        #
+        # Executed directly by Python.
         # The LLM is NOT asked to call the RAG tool.
-        # --------------------------------------------------------
+        # ========================================================
+
         rag_result = self._rag_context(
+
             self._requested_application,
-            self._current_inputs.get("service"),
-            self._current_inputs.get("jurisdiction"),
+
+            self._current_inputs.get(
+                "service"
+            ),
+
+            self._current_inputs.get(
+                "jurisdiction"
+            ),
+
             self._requested_application,
-            self._current_inputs.get("pipe_material"),
+
+            self._current_inputs.get(
+                "pipe_material"
+            ),
         )
 
-        # --------------------------------------------------------
-        # STAGE 2: deterministic engineering workflow.
-        # The LLM is NOT asked to call the calculation tool either.
+        # ========================================================
+        # STAGE 2
+        # Deterministic engineering workflow
+        #
+        # The LLM is NOT asked to call the calculation tool.
         # The complete structured inputs remain inside Python.
-        # --------------------------------------------------------
+        # ========================================================
+
         workflow_result = self._execute_tool_call(
             workflow_name,
             {},
         )
+
         self._state.last_tool_results.append(
             {
                 "tool": workflow_name,
@@ -486,49 +856,75 @@ class PumpDesignAgent:
             }
         )
 
-        # --------------------------------------------------------
-        # STAGE 3: one small LLM call for explanation only.
-        # Send only the selected criteria and deterministic result.
-        # --------------------------------------------------------
+        # ========================================================
+        # STAGE 3
+        # Final LLM explanation
+        #
+        # Only selected criteria and deterministic results are sent.
+        # ========================================================
+
         compact_rag = {
-            "velocity_criteria": rag_result.get(
-                "velocity_criteria"
-            ),
-            "hazen_williams_c": rag_result.get(
-                "hazen_williams_c"
-            ),
-            "references": rag_result.get(
-                "references", []
-            ),
-            "criteria": rag_result.get(
-                "criteria", []
-            ),
+
+            "velocity_criteria":
+                rag_result.get(
+                    "velocity_criteria"
+                ),
+
+            "hazen_williams_c":
+                rag_result.get(
+                    "hazen_williams_c"
+                ),
+
+            "references":
+                rag_result.get(
+                    "references",
+                    []
+                ),
+
+            "criteria":
+                rag_result.get(
+                    "criteria",
+                    []
+                ),
         }
 
         final_payload = {
-            "application": self._requested_application,
-            "user_request": user_request,
-            "engineering_criteria": compact_rag,
-            "deterministic_design_result": workflow_result,
+
+            "application":
+                self._requested_application,
+
+            "user_request":
+                user_request,
+
+            "engineering_criteria":
+                compact_rag,
+
+            "deterministic_design_result":
+                workflow_result,
         }
 
         messages = [
+
             {
                 "role": "system",
+
                 "content": (
                     SYSTEM_PROMPT
                     + "\n\n"
                     + "You are now in the final explanation stage. "
-                    + "The engineering calculation has already been executed "
-                    + "by deterministic Python tools. Do not calculate, "
-                    + "change, or invent numerical values. Explain the supplied "
-                    + "result, show important formulas/inputs when present, "
-                    + "identify missing inputs or warnings, and cite the "
-                    + "provided engineering references."
+                    + "The engineering calculation has already been "
+                    + "executed by deterministic Python tools. "
+                    + "Do not calculate, change, or invent numerical "
+                    + "values. Explain the supplied result, show "
+                    + "important formulas/inputs when present, "
+                    + "identify missing inputs or warnings, and cite "
+                    + "the provided engineering references."
                 ),
             },
+
             {
                 "role": "user",
+
                 "content": json.dumps(
                     final_payload,
                     default=str,
@@ -539,28 +935,42 @@ class PumpDesignAgent:
         self._state.messages = messages
 
         final_response = client.chat.completions.create(
+
             model=self.model,
+
             messages=messages,
+
             max_tokens=800,
+
             tools=[],
+
             tool_choice="none",
+
             temperature=0,
         )
 
-        final_message = final_response.choices[0].message
+        final_message = (
+            final_response
+            .choices[0]
+            .message
+        )
+
         final = final_message.content
 
         if not final:
+
             final = (
-                "The deterministic engineering calculation completed, "
-                "but the AI explanation was empty."
+                "The deterministic engineering calculation "
+                "completed, but the AI explanation was empty."
             )
 
         self._state.messages = messages + [
+
             {
                 "role": "assistant",
                 "content": final,
             }
+
         ]
 
         return final
