@@ -860,47 +860,243 @@ class PumpDesignAgent:
         # STAGE 3
         # Final LLM explanation
         #
-        # Only selected criteria and deterministic results are sent.
+        # IMPORTANT:
+        # The LLM receives ONLY information relevant to the current
+        # design calculation. The complete RAG packet remains inside
+        # Python for engineering/report purposes.
         # ========================================================
 
-        compact_rag = {
+        def _text(value: Any) -> str:
+            if value is None:
+                return ""
+            if isinstance(value, (dict, list, tuple)):
+                try:
+                    return json.dumps(value, default=str).lower()
+                except Exception:
+                    return str(value).lower()
+            return str(value).lower()
 
-            "velocity_criteria":
-                rag_result.get(
-                    "velocity_criteria"
-                ),
+        # --------------------------------------------------------
+        # Build relevance terms from the ACTUAL calculation.
+        # This prevents unrelated RAG criteria from reaching the LLM.
+        # --------------------------------------------------------
+        calculation_names = [
+            _text(item.get("name"))
+            for item in (workflow_result.get("calculations", []) or [])
+            if isinstance(item, dict)
+        ]
 
-            "hazen_williams_c":
-                rag_result.get(
-                    "hazen_williams_c"
-                ),
+        calculation_text = " ".join(calculation_names)
 
-            "references":
-                rag_result.get(
+        input_text = " ".join(
+            f"{key} {_text(value)}"
+            for key, value in self._current_inputs.items()
+        )
+
+        application_terms = {
+            "TRANSFER": {
+                "transfer", "oht", "tank", "static head", "tdh",
+                "flow", "demand", "pipe", "velocity", "friction",
+                "hazen", "pump", "pressure"
+            },
+            "BOOSTER": {
+                "booster", "pressure", "residual pressure", "flow",
+                "pipe", "velocity", "friction", "hazen", "tdh", "pump"
+            },
+            "SUBMERSIBLE": {
+                "submersible", "sump", "tank", "flow", "static head",
+                "pipe", "velocity", "friction", "hazen", "tdh", "pump"
+            },
+            "HOT_WATER_RECIRCULATION": {
+                "hot water", "recirculation", "temperature", "flow",
+                "pipe", "velocity", "friction", "hazen", "pump"
+            },
+        }
+
+        relevant_terms = set(
+            application_terms.get(
+                self._requested_application,
+                set(),
+            )
+        )
+
+        # Add terms from the actual calculation names and inputs.
+        # Only short engineering tokens are retained so arbitrary user
+        # text cannot cause unrelated standards to be selected.
+        for source_text in (calculation_text, input_text):
+            tokens = {
+                token.strip(".,:;()[]{}")
+                for token in source_text.lower().split()
+            }
+            relevant_terms.update(
+                token
+                for token in tokens
+                if len(token) >= 4
+                and token.replace("_", "").replace("-", "").isalnum()
+            )
+
+        # These are always relevant when the current workflow actually
+        # performs pipe sizing / hydraulic loss calculations.
+        pipe_related = any(
+            word in calculation_text
+            for word in (
+                "pipe", "friction", "hydraulic", "tdh",
+                "velocity", "head loss", "hazen"
+            )
+        )
+
+        if self._current_inputs.get("pipe_material"):
+            relevant_terms.add(
+                _text(self._current_inputs["pipe_material"])
+            )
+
+        # --------------------------------------------------------
+        # Select criteria by actual relevance.
+        # Do NOT use [:10] because retrieval order is not a relevance
+        # guarantee.
+        # --------------------------------------------------------
+        selected_criteria: list[dict[str, Any]] = []
+
+        for criterion in rag_result.get("criteria", []) or []:
+            if not isinstance(criterion, dict):
+                continue
+
+            parameter = _text(criterion.get("parameter"))
+            applicability = _text(criterion.get("applicability"))
+            criterion_type = _text(criterion.get("criterion_type"))
+            value = _text(criterion.get("value"))
+
+            criterion_text = " ".join(
+                (
+                    parameter,
+                    applicability,
+                    criterion_type,
+                    value,
+                )
+            )
+
+            is_relevant = any(
+                term and term in criterion_text
+                for term in relevant_terms
+            )
+
+            # Explicitly include the resolved velocity criterion only when
+            # the current calculation actually uses pipe/hydraulic sizing.
+            if (
+                pipe_related
+                and (
+                    "velocity" in parameter
+                    or "velocity" in criterion_type
+                )
+            ):
+                is_relevant = True
+
+            # Explicitly include the resolved Hazen-Williams criterion only
+            # when pipe material/hydraulic loss is part of this calculation.
+            if (
+                pipe_related
+                and "hazen" in parameter
+            ):
+                is_relevant = True
+
+            if is_relevant:
+                selected_criteria.append({
+                    key: criterion.get(key)
+                    for key in (
+                        "parameter",
+                        "value",
+                        "unit",
+                        "min_value",
+                        "max_value",
+                        "applicability",
+                        "source_reference_id",
+                        "source_section",
+                        "source_page",
+                    )
+                    if criterion.get(key) is not None
+                })
+
+        # Add the resolved hydraulic values as compact engineering facts.
+        relevant_velocity = (
+            rag_result.get("velocity_criteria")
+            if pipe_related
+            else None
+        )
+        relevant_hw = (
+            rag_result.get("hazen_williams_c")
+            if pipe_related
+            else None
+        )
+
+        relevant_reference_ids = sorted({
+            str(c.get("source_reference_id"))
+            for c in selected_criteria
+            if c.get("source_reference_id")
+        })
+
+        # --------------------------------------------------------
+        # Compact deterministic result.
+        # The LLM does not need the entire internal workflow object.
+        # --------------------------------------------------------
+        compact_calculations = []
+        for item in workflow_result.get("calculations", []) or []:
+            if not isinstance(item, dict):
+                continue
+            compact_calculations.append({
+                key: item.get(key)
+                for key in (
+                    "name",
+                    "status",
+                    "value",
+                    "unit",
+                    "formula",
+                    "method",
+                    "message",
                     "references",
-                    []
-                ),
+                )
+                if item.get(key) is not None
+            })
 
-            "criteria":
-                rag_result.get(
-                    "criteria",
-                    []
-                ),
+        compact_pipe_sizing = workflow_result.get("pipe_sizing")
+        if isinstance(compact_pipe_sizing, dict):
+            compact_pipe_sizing = {
+                key: value
+                for key, value in compact_pipe_sizing.items()
+                if key in {
+                    "selected",
+                    "selected_pipe",
+                    "diameter",
+                    "diameter_mm",
+                    "diameter_in",
+                    "velocity",
+                    "velocity_mps",
+                    "head_loss",
+                    "head_loss_ft",
+                    "friction_loss",
+                    "tdh",
+                }
+            }
+
+        compact_result = {
+            "application": workflow_result.get("application"),
+            "status": workflow_result.get("status"),
+            "calculations": compact_calculations,
+            "pipe_sizing": compact_pipe_sizing,
+            "validation": workflow_result.get("validation", []),
+        }
+
+        compact_rag = {
+            "velocity_criteria": relevant_velocity,
+            "hazen_williams_c": relevant_hw,
+            "references": relevant_reference_ids,
+            "criteria": selected_criteria,
         }
 
         final_payload = {
-
-            "application":
-                self._requested_application,
-
-            "user_request":
-                user_request,
-
-            "engineering_criteria":
-                compact_rag,
-
-            "deterministic_design_result":
-                workflow_result,
+            "application": self._requested_application,
+            "user_request": user_request,
+            "engineering_criteria_used_by_this_design": compact_rag,
+            "deterministic_design_result": compact_result,
         }
 
         messages = [
