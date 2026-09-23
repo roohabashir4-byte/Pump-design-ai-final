@@ -359,27 +359,56 @@ class PumpDesignAgent:
                     "max_mps"
                 ] = c.value
 
+        # Send only the engineering facts actually needed by the LLM.
+        # The complete RAG store remains available internally; it is never
+        # copied into the model context.
+        selected = []
+
+        # Hydraulic method / core calculation criteria.
+        priority_parameters = {
+            "hydraulic_method",
+            "hydraulic_method_selection",
+            "hydraulic_diameter_input",
+            "pipe_sizing_method",
+            "minimum_pressure",
+            "minimum_available_pressure",
+        }
+
+        for c in packet:
+            if c in velocity or c in hw:
+                selected.append(c)
+                continue
+            if c.parameter.lower() in priority_parameters:
+                selected.append(c)
+
+        # Keep the LLM context deliberately small.
+        selected = selected[:6]
+
         self._state.rag_context = {
+            "application": application,
+            "service": service,
+            "jurisdiction": jurisdiction,
             "criteria": [
-                c.model_dump(
-                    mode="json"
-                )
-                for c in packet
-            ],
-
-            "references": sorted(
                 {
-                    c.source_reference_id
-                    for c in packet
+                    "criterion_id": c.criterion_id,
+                    "parameter": c.parameter,
+                    "value": c.value,
+                    "unit": c.unit,
+                    "applicability": c.applicability,
+                    "source_reference_id": c.source_reference_id,
+                    "source_section": c.source_section,
+                    "source_page": c.source_page,
                 }
+                for c in selected
+            ],
+            "references": sorted(
+                {c.source_reference_id for c in selected}
             ),
-
             "velocity_criteria": (
                 velocity_context
                 if velocity_context
                 else None
             ),
-
             "hazen_williams_c": (
                 hw[0].value
                 if hw
@@ -426,9 +455,15 @@ class PumpDesignAgent:
 
     def _tool_schemas(
         self,
+        *,
+        include_rag: bool = True,
+        include_workflows: bool = True,
     ) -> list[dict[str, Any]]:
 
-        schemas = [
+        schemas = []
+
+        if include_rag:
+            schemas.append(
             {
                 "type": "function",
                 "function": {
@@ -467,32 +502,33 @@ class PumpDesignAgent:
                     },
                 },
             }
-        ]
-
-        for name in self.router.available_tools():
-
-            tool = self.router.get(name)
-
-            schemas.append(
-                {
-                    "type": "function",
-
-                    "function": {
-                        "name": name,
-
-                        "description":
-                            tool.description,
-
-                        "parameters": (
-                            tool.input_schema
-                            or {
-                                "type": "object",
-                                "additionalProperties": True,
-                            }
-                        ),
-                    },
-                }
             )
+
+        if include_workflows:
+            for name in self.router.available_tools():
+
+                tool = self.router.get(name)
+
+                schemas.append(
+                    {
+                        "type": "function",
+
+                        "function": {
+                            "name": name,
+
+                            "description":
+                                tool.description,
+
+                            "parameters": (
+                                tool.input_schema
+                                or {
+                                    "type": "object",
+                                    "additionalProperties": True,
+                                }
+                            ),
+                        },
+                    }
+                )
 
         return schemas
 
@@ -655,7 +691,10 @@ class PumpDesignAgent:
 
                     max_tokens=800,
 
-                    tools=self._tool_schemas(),
+                    tools=self._tool_schemas(
+                        include_rag=not rag_completed,
+                        include_workflows=rag_completed and not workflow_completed,
+                    ),
 
                     tool_choice=tool_choice,
 
