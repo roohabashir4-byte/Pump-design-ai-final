@@ -231,7 +231,7 @@ def commercial_pump_ui(duty_result: dict[str, Any] | None) -> None:
     c1, c2, c3 = st.columns(3)
     flow_unit = c1.selectbox("Curve Flow Unit", ["m³/s", "L/s", "gpm"], key="pump_curve_flow_unit")
     head_unit = c2.selectbox("Curve Head Unit", ["m", "ft"], key="pump_curve_head_unit")
-    npshr_unit = c3.selectbox("NPSHr Unit", ["m", "ft"], key="pump_curve_npshr_unit")
+    npshr_unit = c3.selectbox("Curve NPSHr Unit", ["m", "ft"], key="pump_curve_npshr_unit")
     st.caption("CSV columns: flow, head, and optional efficiency (fraction, e.g. 0.78) and npshr. At least two curve points are required.")
     csv_text = st.text_area(
         "Manufacturer Curve CSV",
@@ -322,7 +322,11 @@ def render_result(result: Any) -> None:
 
 @st.cache_resource(show_spinner=False)
 def get_memory_db() -> MemoryDB:
-    return MemoryDB(os.getenv("PUMPDESIGN_MEMORY_DB", str(ROOT / "pumpdesign_memory.sqlite3")))
+    db_path = os.getenv(
+        "PUMPDESIGN_MEMORY_DB",
+        str(ROOT / "pumpdesign_memory.sqlite3"),
+    )
+    return MemoryDB(db_path)
 
 
 @st.cache_resource(show_spinner=False)
@@ -389,6 +393,7 @@ with st.sidebar:
                 st.rerun()
     if st.session_state.get("loaded_design_id"):
         st.caption(f"Loaded design: {st.session_state['loaded_design_id']}")
+
 
 def seed_loaded_form_state() -> None:
     """Populate Streamlit widget state from the loaded structured design."""
@@ -473,49 +478,101 @@ if run:
                 answer = agent.run(request, context=context)
             st.session_state["last_answer"] = answer
             st.session_state["last_agent_state"] = agent.state
+
             # Persist structured project/design data only; reports/chat history are not stored.
             try:
                 memory = get_project_memory()
                 tool_results = agent.state.last_tool_results or []
-                deterministic = next((x["result"] for x in reversed(tool_results) if isinstance(x.get("result"), dict) and x["result"].get("calculations") is not None), None)
+                deterministic = next(
+                    (
+                        x["result"]
+                        for x in reversed(tool_results)
+                        if isinstance(x.get("result"), dict)
+                        and x["result"].get("calculations") is not None
+                    ),
+                    None,
+                )
                 if deterministic is None:
-                    deterministic = {"status": "NOT_CALCULABLE", "message": "No deterministic calculation result was returned by the agent."}
+                    deterministic = {
+                        "status": "NOT_CALCULABLE",
+                        "message": "No deterministic calculation result was returned by the agent.",
+                    }
                 result_payload = deterministic
 
                 old_design_id = st.session_state.get("loaded_design_id")
                 old_inputs = st.session_state.get("loaded_inputs")
+
                 if old_design_id and old_inputs:
                     rev = create_design_revision(
-                        get_memory_db(), old_design_id, "Engineer-created design revision", old_inputs, data, result_payload
+                        get_memory_db(),
+                        old_design_id,
+                        "Engineer-created design revision",
+                        old_inputs,
+                        data,
+                        result_payload,
                     )
                     st.session_state["revision_number"] = rev
-                    memory.db.save_design({
-                        "design_id": old_design_id,
-                        "project_id": get_memory_db().get_design(old_design_id)["project_id"],
-                        "application": application_code,
-                        "scenario": data.get("different_scenario") or application_code,
-                        "inputs": data,
-                        "current_revision": rev,
-                    }, result=result_payload, status="AI_COMPLETED")
+
+                    existing_design = get_memory_db().get_design(old_design_id)
+
+                    if existing_design:
+                        memory.db.save_design(
+                            {
+                                "design_id": old_design_id,
+                                "project_id": existing_design["project_id"],
+                                "application": application_code,
+                                "scenario": data.get("different_scenario") or application_code,
+                                "inputs": data,
+                                "current_revision": rev,
+                            },
+                            result=result_payload,
+                            status="AI_COMPLETED",
+                        )
+
+                    st.session_state["loaded_inputs"] = data
                     st.success(f"Revision {rev} saved.")
                 else:
-                    pid, did = memory.save_project_and_design(data, application_code, result_payload)
+                    pid, did = memory.save_project_and_design(
+                        data,
+                        application_code,
+                        result_payload,
+                    )
                     st.session_state["loaded_design_id"] = did
                     st.session_state["loaded_inputs"] = data
+                    st.session_state["loaded_application"] = application_code
                     st.success("Project and design saved for future reuse.")
-                design_id_for_report = st.session_state.get("loaded_design_id") or did
+
+                design_id_for_report = (
+                    st.session_state.get("loaded_design_id")
+                    or did
+                )
+
                 st.session_state["last_report_payload"] = build_report_payload(
                     design_id=design_id_for_report,
                     application=application_code,
                     inputs=data,
                     result=result_payload,
                     rag_context=agent.state.rag_context,
-                    project={k: data.get(k) for k in ["project_name", "location", "jurisdiction", "building_type"] if data.get(k) is not None},
+                    project={
+                        k: data.get(k)
+                        for k in [
+                            "project_name",
+                            "location",
+                            "jurisdiction",
+                            "building_type",
+                        ]
+                        if data.get(k) is not None
+                    },
                 )
+
             except Exception as memory_exc:
-                st.warning(f"Design completed, but memory could not be saved: {memory_exc}")
+                st.warning(
+                    f"Design completed, but memory could not be saved: {memory_exc}"
+                )
+
         except Exception as exc:
             st.error(f"Design run failed: {exc}")
+
 
 if st.session_state.get("last_answer"):
     st.divider()
@@ -523,38 +580,82 @@ if st.session_state.get("last_answer"):
     st.markdown(st.session_state["last_answer"])
 
     report_payload = st.session_state.get("last_report_payload")
+
     if report_payload:
         st.subheader("Engineering Calculation Report")
-        st.caption("The report presents deterministic calculation results, formulas, inputs, assumptions, validation status, and retrieved references. Reports are generated for download and are not stored as project memory.")
+        st.caption(
+            "The report presents deterministic calculation results, formulas, "
+            "inputs, assumptions, validation status, and retrieved references. "
+            "Reports are generated for download and are not stored as project memory."
+        )
+
         md_report = render_markdown(report_payload)
         html_report = render_html(report_payload)
         pdf_path = ROOT / "reports" / f"{report_payload['report_id']}.pdf"
+
         try:
             generate_pdf(report_payload, pdf_path)
             pdf_bytes = pdf_path.read_bytes()
-            st.download_button("Download Engineering Calculation Report (PDF)", data=pdf_bytes, file_name=pdf_path.name, mime="application/pdf", use_container_width=True)
+
+            st.download_button(
+                "Download Engineering Calculation Report (PDF)",
+                data=pdf_bytes,
+                file_name=pdf_path.name,
+                mime="application/pdf",
+                use_container_width=True,
+            )
         except Exception as report_exc:
-            st.warning(f"PDF report could not be generated: {report_exc}")
-        st.download_button("Download Calculation Report (Markdown)", data=md_report, file_name=f"{report_payload['report_id']}.md", mime="text/markdown")
-        st.download_button("Download Calculation Report (HTML)", data=html_report, file_name=f"{report_payload['report_id']}.html", mime="text/html")
+            st.warning(
+                f"PDF report could not be generated: {report_exc}"
+            )
+
+        st.download_button(
+            "Download Calculation Report (Markdown)",
+            data=md_report,
+            file_name=f"{report_payload['report_id']}.md",
+            mime="text/markdown",
+        )
+
+        st.download_button(
+            "Download Calculation Report (HTML)",
+            data=html_report,
+            file_name=f"{report_payload['report_id']}.html",
+            mime="text/html",
+        )
 
     last_deterministic = None
     state_for_pump = st.session_state.get("last_agent_state")
+
     if state_for_pump:
         tool_results_for_pump = state_for_pump.last_tool_results or []
-        last_deterministic = next((x["result"] for x in reversed(tool_results_for_pump) if isinstance(x.get("result"), dict) and x["result"].get("pump_duty") is not None), None)
+        last_deterministic = next(
+            (
+                x["result"]
+                for x in reversed(tool_results_for_pump)
+                if isinstance(x.get("result"), dict)
+                and x["result"].get("pump_duty") is not None
+            ),
+            None,
+        )
+
     commercial_pump_ui(last_deterministic)
 
     loaded_id = st.session_state.get("loaded_design_id")
+
     if loaded_id:
         revisions = get_memory_db().list_revisions(loaded_id)
+
         if revisions:
             with st.expander("Revision History"):
                 for rev in revisions:
-                    st.write(f"Revision {rev['revision_number']} — {rev['reason']} — {rev['created_at']}")
+                    st.write(
+                        f"Revision {rev['revision_number']} — "
+                        f"{rev['reason']} — {rev['created_at']}"
+                    )
                     st.json(rev["changed_parameters"])
 
     state = st.session_state.get("last_agent_state")
+
     if state and state.rag_context:
         with st.expander("Engineering Criteria Retrieved from RAG"):
             st.json(state.rag_context)
