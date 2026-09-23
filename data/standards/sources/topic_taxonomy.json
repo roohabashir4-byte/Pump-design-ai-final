@@ -1,0 +1,38 @@
+{
+  "version": "2.0",
+  "design_principle": "Retrieve engineering knowledge primarily by engineering topic/system/flow context. Jurisdiction and source location are metadata and applicability evidence, not the primary retrieval filter.",
+  "systems": {
+    "WATER_SUPPLY": "Pressurized potable/domestic water systems, including public mains and building water-supply systems.",
+    "SEWERAGE": "Wastewater/sewer systems, including gravity sewers and sewer force mains.",
+    "DRAINAGE": "Stormwater/drainage systems.",
+    "GENERAL_BUILDING_PLUMBING": "Cross-cutting building plumbing/code requirements."
+  },
+  "flow_types": {
+    "PRESSURIZED": "Water flowing in a closed pressurized pipe system.",
+    "GRAVITY_OPEN_CHANNEL": "Gravity wastewater/drainage flow.",
+    "PRESSURIZED_FORCE_MAIN": "Pressurized sewer force-main flow; separate from potable water supply."
+  },
+  "topics": {
+    "PIPE_VELOCITY": "Allowable/design velocity ranges or limits for a specific pressurized/gravity system.",
+    "PIPE_FRICTION": "Head loss, roughness coefficients, Hazen-Williams, Darcy-Weisbach and friction methodology.",
+    "PIPE_SIZING": "Diameter selection, minimum sizes and hydraulic sizing procedures.",
+    "PIPE_MATERIAL": "Pipe materials, standards, pressure classes and material suitability.",
+    "PRESSURE": "Minimum/maximum/terminal/source pressure and pressure-control requirements.",
+    "DEMAND_FLOW": "Demand, design flow, peak factors and flow basis.",
+    "STORAGE": "Tank/reservoir storage criteria and operating basis.",
+    "PUMP_HEAD": "Pump head, energy balance and system head requirements.",
+    "PUMP_PROTECTION": "Booster controls, low-pressure cutoff, relief and protection requirements.",
+    "SOURCE_CAPACITY": "Well/source yield, source capacity and source limitations.",
+    "VALVES_AIR_MANAGEMENT": "Check valves, air valves and hydraulic appurtenances.",
+    "HOT_WATER_RECIRCULATION": "Hot-water recirculation flow, head, controls and temperature criteria.",
+    "NPSH": "Net positive suction head and cavitation requirements.",
+    "WATER_QUALITY_PROTECTION": "Potable water protection, backflow and cross-connection control.",
+    "GOVERNING_CODE": "Code hierarchy, AHJ and standards-selection rules."
+  },
+  "exclusion_rules": [
+    "Do not retrieve SEWERAGE velocity/self-cleansing criteria for a WATER_SUPPLY calculation merely because the word velocity matches.",
+    "Do not retrieve DRAINAGE criteria for WATER_SUPPLY calculations.",
+    "Do not use public-water-network criteria as automatic building-plumbing criteria; retrieve them as source-specific candidates and evaluate applicability.",
+    "Jurisdiction/location identifies where a source criterion applies; it does not by itself decide the engineering topic or system classification."
+  ]
+}

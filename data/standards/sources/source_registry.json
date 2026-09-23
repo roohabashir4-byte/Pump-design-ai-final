@@ -2,112 +2,115 @@
   {
     "source_id": "BCP-2021",
     "title": "Building Code of Pakistan 2021",
-    "organization": "Pakistan Engineering Council",
-    "year": 2021,
+    "organization": "Pakistan Engineering Council / Building Code of Pakistan",
+    "edition_year": 2021,
+    "source_type": "governing_code",
     "jurisdiction": "Pakistan",
-    "authority_level": "governing_national_code",
-    "access_type": "official_public_pdf",
-    "url": "https://www.pec.org.pk/wp-content/uploads/2025/01/BCP-2021.pdf",
-    "relevance": [
-      "plumbing",
-      "water_supply",
-      "jurisdiction",
-      "referenced_codes",
-      "AHJ"
+    "status": "primary",
+    "local_file": "BCP2021-Final-Draft-dated-26.10.2021.pdf",
+    "file_id": "file_00000000af288208a202f3412acf71d5",
+    "notes": "BCP 2021 establishes the plumbing-code framework and identifies IPC-21 as a referenced code. AHJ applicability remains controlling.",
+    "domain": "BUILDING_CODE",
+    "systems": [
+      "GENERAL_BUILDING_PLUMBING",
+      "WATER_SUPPLY"
     ],
-    "notes": "BCP 2021 states that referenced codes form part of its requirements to the prescribed extent. Its plumbing provision states that IPC applies unless not required by the AHJ."
+    "primary_retrieval_topics": [
+      "GOVERNING_CODE"
+    ],
+    "source_location": "Pakistan"
   },
   {
-    "source_id": "IPC-2021-CH6",
-    "title": "2021 International Plumbing Code \u2014 Chapter 6 Water Supply and Distribution",
-    "organization": "International Code Council",
-    "year": 2021,
-    "jurisdiction": "International fallback / where adopted",
-    "authority_level": "model_code",
-    "access_type": "official_public_web",
+    "source_id": "IPC-2021",
+    "title": "2021 International Plumbing Code",
+    "organization": "International Code Council (ICC)",
+    "edition_year": 2021,
+    "source_type": "referenced_code",
+    "jurisdiction": "Referenced by BCP 2021",
+    "status": "primary_for_building_plumbing_when_BCP_AHJ_applies",
     "url": "https://codes.iccsafe.org/content/IPC2021P1/chapter-6-water-supply-and-distribution",
-    "relevance": [
-      "water_supply",
-      "water_distribution",
-      "hot_water",
-      "materials",
-      "installation",
-      "pressure"
+    "notes": "Use the 2021 edition because BCP Chapter 34 identifies IPC-21. Only the sections relevant to PumpDesign AI are represented in this RAG package.",
+    "domain": "BUILDING_PLUMBING",
+    "systems": [
+      "GENERAL_BUILDING_PLUMBING",
+      "WATER_SUPPLY"
     ],
-    "notes": "Chapter 6 governs design and installation of hot and cold water supply systems and individual water-supply systems; it includes water-supply, design, material, installation, hot-water, potable protection and temperature-control provisions."
+    "primary_retrieval_topics": [
+      "GOVERNING_CODE",
+      "PRESSURE",
+      "PIPE_SIZING",
+      "PUMP_PROTECTION",
+      "HOT_WATER_RECIRCULATION",
+      "WATER_QUALITY_PROTECTION"
+    ],
+    "source_location": "International / referenced by BCP 2021"
   },
   {
-    "source_id": "IPC-2021-APPE",
-    "title": "2021 International Plumbing Code \u2014 Appendix E Sizing of Water Piping System",
-    "organization": "International Code Council",
-    "year": 2021,
-    "jurisdiction": "International fallback / only where adopted or otherwise applicable",
-    "authority_level": "model_code_appendix",
-    "access_type": "official_public_web",
-    "url": "https://codes.iccsafe.org/content/IPC2021P1/appendix-e-sizing-of-water-piping-system",
-    "relevance": [
-      "pipe_sizing",
-      "fixture_units",
-      "available_pressure",
-      "elevation",
-      "friction_loss"
+    "source_id": "PHED-PUNJAB-2023",
+    "title": "Updated Design Criteria for Water Supply, Sewerage and Drainage System in Punjab",
+    "organization": "Punjab Public Health Engineering Department / Government of Punjab",
+    "edition_year": 2023,
+    "source_type": "provincial_public_water_supply_criteria",
+    "jurisdiction": "Punjab, Pakistan",
+    "status": "provisional_public_copy",
+    "url": "https://www.scribd.com/document/832483538/Updated-Design-Criteria-Final-Word-File",
+    "notes": "Publicly accessible copy found online. Treat as provisional until an official Government of Punjab/PHED copy is supplied. Intended primarily for public water-supply systems, not automatically for internal building plumbing.",
+    "domain": "WATER_SUPPLY_AND_SANITATION",
+    "systems": [
+      "WATER_SUPPLY",
+      "SEWERAGE",
+      "DRAINAGE"
     ],
-    "notes": "Appendix E states that it is not mandatory unless specifically referenced in the adopting ordinance. It provides water-piping sizing procedures based on available static pressure, elevation/head changes, friction and fixture flow requirements."
+    "primary_retrieval_topics": [
+      "PIPE_VELOCITY",
+      "PIPE_FRICTION",
+      "DEMAND_FLOW",
+      "PRESSURE",
+      "STORAGE",
+      "SOURCE_CAPACITY",
+      "PIPE_MATERIAL",
+      "VALVES_AIR_MANAGEMENT"
+    ],
+    "source_location": "Punjab, Pakistan",
+    "applicability_note": "The document contains separate Water Supply, Sewerage and Drainage sections. Retrieval must use system/topic metadata so sewerage criteria are not mixed into water-supply calculations."
   },
   {
-    "source_id": "ASHRAE-F25-CH3",
-    "title": "ASHRAE Handbook\u2014Fundamentals 2025, Chapter 3 Fluid Flow",
-    "organization": "ASHRAE",
-    "year": 2025,
-    "jurisdiction": "Engineering reference",
-    "authority_level": "recognized_engineering_reference",
-    "access_type": "official_public_web",
-    "url": "https://handbook.ashrae.org/Handbooks/F25/IP/f25_ch03/f25_ch03_ip.aspx",
-    "relevance": [
-      "fluid_flow",
-      "continuity",
-      "pressure",
-      "hydraulics"
+    "source_id": "WASA-LAHORE-HISTORICAL",
+    "title": "WASA Lahore Design Criteria (historical reference mentioned in Punjab 2023 criteria)",
+    "organization": "WASA Lahore",
+    "source_type": "historical_context",
+    "jurisdiction": "Lahore, Punjab, Pakistan",
+    "status": "context_only",
+    "notes": "The 2023 Punjab criteria states that the older WASA Lahore criterion used 80 GPCD but does not recommend continuing to apply that value universally. This is not an active PumpDesign AI design criterion.",
+    "domain": "HISTORICAL_PUBLIC_WATER_SUPPLY",
+    "systems": [
+      "WATER_SUPPLY"
     ],
-    "notes": "Engineering reference for fluid-flow fundamentals used by the hydraulic calculation layer."
-  },
-  {
-    "source_id": "ASHRAE-F25-CH22",
-    "title": "ASHRAE Handbook\u2014Fundamentals 2025, Chapter 22 Pipe and Tube Design",
-    "organization": "ASHRAE",
-    "year": 2025,
-    "jurisdiction": "Engineering reference",
-    "authority_level": "recognized_engineering_reference",
-    "access_type": "official_public_web",
-    "url": "https://handbook.ashrae.org/Handbooks/F25/IP/F25_Ch22/F25_Ch22_ip.aspx",
-    "relevance": [
-      "pipe_sizing",
-      "service_water",
-      "hydraulic_losses",
-      "Hazen_Williams",
-      "Darcy_Weisbach",
-      "materials",
-      "water_hammer"
+    "primary_retrieval_topics": [
+      "DEMAND_FLOW"
     ],
-    "notes": "Provides a pipe-system sizing workflow, discusses service-water diversity, pipe materials and hydraulic losses, and notes Darcy-Weisbach as an alternative to pressure-drop charts. It cautions about extending Hazen-Williams C values outside their original conditions."
+    "source_location": "Lahore, Punjab, Pakistan",
+    "applicability_note": "Historical/context-only source; not an automatic current design criterion."
   },
   {
     "source_id": "ASHRAE-A23-CH51",
-    "title": "ASHRAE Handbook\u2014HVAC Applications 2023, Chapter 51 Service Water Heating",
+    "title": "2023 ASHRAE Handbook\u2014HVAC Applications, Chapter 51: Service Water Heating",
     "organization": "ASHRAE",
-    "year": 2023,
-    "jurisdiction": "Engineering reference",
-    "authority_level": "recognized_engineering_reference",
-    "access_type": "official_public_web",
-    "url": "https://handbook.ashrae.org/Handbooks/A23/IP/A23_Ch51/a23_ch51_ip.aspx",
-    "relevance": [
-      "hot_water",
-      "recirculation",
-      "heat_loss",
-      "return_piping",
-      "temperature",
-      "pump_sizing"
+    "edition_year": 2023,
+    "source_type": "recognized_engineering_reference",
+    "jurisdiction": "International engineering reference",
+    "status": "primary_engineering_reference_for_hot_water_recirculation",
+    "url": "https://handbook.ashrae.org/Handbooks/A23/SI/A23_Ch51/a23_ch51_si.aspx",
+    "notes": "Used for hot-water recirculation purpose, controls, heat-loss-based circulation flow sizing, pipe sizing considerations and pump head selection workflow.",
+    "domain": "HVAC_WATER_SYSTEMS",
+    "systems": [
+      "WATER_SUPPLY"
     ],
-    "notes": "Relevant to hot-water recirculation: system planning, flow/temperature requirements, hot-water pipe sizing, pressure differential, heat-loss/recirculation concepts and controls. The chapter warns that some demand data may be outdated and should be treated appropriately."
+    "primary_retrieval_topics": [
+      "HOT_WATER_RECIRCULATION",
+      "PIPE_FRICTION",
+      "PIPE_SIZING"
+    ],
+    "source_location": "International"
   }
 ]

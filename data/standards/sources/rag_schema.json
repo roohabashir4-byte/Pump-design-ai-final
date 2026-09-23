@@ -1,0 +1,68 @@
+{
+  "version": "2.0",
+  "retrieval_rule": "Retrieve by system + engineering topic + flow type + application/subsystem. Jurisdiction/source location is metadata and a scoring/context field, not a primary filter.",
+  "primary_filters": [
+    "system",
+    "topic",
+    "flow_type"
+  ],
+  "secondary_context": [
+    "application",
+    "subsystem",
+    "service"
+  ],
+  "metadata_only": [
+    "jurisdiction",
+    "source_location",
+    "edition_year",
+    "source_status",
+    "reference"
+  ],
+  "mandatory_metadata": [
+    "chunk_id",
+    "source_id",
+    "system",
+    "topic",
+    "flow_type",
+    "applicability_context",
+    "reference"
+  ],
+  "exclusion_rule": "A WATER_SUPPLY query must exclude SEWERAGE and DRAINAGE records unless the user explicitly requests comparison across systems.",
+  "criterion_fields": [
+    "criterion_id",
+    "source_id",
+    "name",
+    "value",
+    "unit",
+    "scope",
+    "application",
+    "system",
+    "subsystem",
+    "flow_type",
+    "topic",
+    "criterion_kind",
+    "applicability",
+    "applicability_context",
+    "source_location",
+    "status",
+    "reference",
+    "retrieval_tags"
+  ],
+  "chunk_fields": [
+    "chunk_id",
+    "source_id",
+    "priority",
+    "topic",
+    "system",
+    "subsystem",
+    "flow_type",
+    "application",
+    "source_location",
+    "source_status",
+    "applicability_context",
+    "retrieval_tags",
+    "text",
+    "reference"
+  ],
+  "calculation_rule": "Numerical design results come from deterministic calculation tools; RAG provides criteria, methods, applicability and references."
+}
