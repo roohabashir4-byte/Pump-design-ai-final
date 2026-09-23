@@ -70,7 +70,6 @@ class PumpDesignAgent:
         self.max_tool_rounds = max_tool_rounds
 
         self._state = AgentState()
-
         self._requested_application: str | None = None
         self._current_inputs: dict[str, Any] = {}
 
@@ -360,56 +359,27 @@ class PumpDesignAgent:
                     "max_mps"
                 ] = c.value
 
-        # Send only the engineering facts actually needed by the LLM.
-        # The complete RAG store remains available internally; it is never
-        # copied into the model context.
-        selected = []
-
-        # Hydraulic method / core calculation criteria.
-        priority_parameters = {
-            "hydraulic_method",
-            "hydraulic_method_selection",
-            "hydraulic_diameter_input",
-            "pipe_sizing_method",
-            "minimum_pressure",
-            "minimum_available_pressure",
-        }
-
-        for c in packet:
-            if c in velocity or c in hw:
-                selected.append(c)
-                continue
-            if c.parameter.lower() in priority_parameters:
-                selected.append(c)
-
-        # Keep the LLM context deliberately small.
-        selected = selected[:6]
-
         self._state.rag_context = {
-            "application": application,
-            "service": service,
-            "jurisdiction": jurisdiction,
             "criteria": [
-                {
-                    "criterion_id": c.criterion_id,
-                    "parameter": c.parameter,
-                    "value": c.value,
-                    "unit": c.unit,
-                    "applicability": c.applicability,
-                    "source_reference_id": c.source_reference_id,
-                    "source_section": c.source_section,
-                    "source_page": c.source_page,
-                }
-                for c in selected
+                c.model_dump(
+                    mode="json"
+                )
+                for c in packet
             ],
+
             "references": sorted(
-                {c.source_reference_id for c in selected}
+                {
+                    c.source_reference_id
+                    for c in packet
+                }
             ),
+
             "velocity_criteria": (
                 velocity_context
                 if velocity_context
                 else None
             ),
+
             "hazen_williams_c": (
                 hw[0].value
                 if hw
@@ -446,104 +416,55 @@ class PumpDesignAgent:
                 f"{application}"
             )
 
-        service = (
-            args.get("service")
-            or self._current_inputs.get("service")
-        )
-        jurisdiction = (
-            args.get("jurisdiction")
-            or self._current_inputs.get("jurisdiction")
-        )
-        material = (
-            args.get("material")
-            or self._current_inputs.get("pipe_material")
-        )
-        query = args.get("query") or application
-
         return self._rag_context(
             application,
-            service,
-            jurisdiction,
-            query,
-            material,
+            args.get("service") or self._current_inputs.get("service"),
+            args.get("jurisdiction") or self._current_inputs.get("jurisdiction"),
+            args.get("query") or application,
+            args.get("material") or self._current_inputs.get("pipe_material"),
         )
 
     def _tool_schemas(
         self,
         *,
         include_rag: bool = True,
-        include_workflows: bool = True,
+        workflow_name: str | None = None,
     ) -> list[dict[str, Any]]:
-
-        schemas = []
+        schemas: list[dict[str, Any]] = []
 
         if include_rag:
-            schemas.append(
-            {
+            schemas.append({
                 "type": "function",
                 "function": {
-                    "name":
-                        "get_engineering_criteria",
-
-                    "description":
-                        RAG_TOOL_DESCRIPTION,
-
+                    "name": "get_engineering_criteria",
+                    "description": RAG_TOOL_DESCRIPTION,
                     "parameters": {
                         "type": "object",
-
                         "properties": {
-                            "application": {
-                                "type": "string"
-                            },
-
-                            "service": {
-                                "type": "string"
-                            },
-
-                            "jurisdiction": {
-                                "type": "string"
-                            },
-
-                            "query": {
-                                "type": "string"
-                            },
-
-                            "material": {
-                                "type": "string"
-                            },
+                            "application": {"type": "string"},
+                            "service": {"type": "string"},
+                            "jurisdiction": {"type": "string"},
+                            "query": {"type": "string"},
+                            "material": {"type": "string"},
                         },
-
                         "required": [],
                     },
                 },
-            }
-            )
+            })
 
-        if include_workflows:
-            for name in self.router.available_tools():
-
-                tool = self.router.get(name)
-
-                schemas.append(
-                    {
-                        "type": "function",
-
-                        "function": {
-                            "name": name,
-
-                            "description":
-                                tool.description,
-
-                            "parameters": (
-                                tool.input_schema
-                                or {
-                                    "type": "object",
-                                    "additionalProperties": True,
-                                }
-                            ),
-                        },
-                    }
-                )
+        if workflow_name:
+            tool = self.router.get(workflow_name)
+            schemas.append({
+                "type": "function",
+                "function": {
+                    "name": workflow_name,
+                    "description": tool.description,
+                    "parameters": tool.input_schema or {
+                        "type": "object",
+                        "additionalProperties": True,
+                    },
+                },
+            })
 
         return schemas
 
@@ -576,12 +497,6 @@ class PumpDesignAgent:
             CalculationRequest,
         )
 
-        workflow_inputs = (
-            dict(self._current_inputs)
-            if self._current_inputs
-            else dict(args)
-        )
-
         req = CalculationRequest(
             request_id=str(
                 uuid.uuid4()
@@ -591,7 +506,7 @@ class PumpDesignAgent:
 
             tool_name=name,
 
-            inputs=workflow_inputs,
+            inputs=(dict(self._current_inputs) if self._current_inputs else args),
 
             purpose=(
                 "Agent-orchestrated "
@@ -613,90 +528,61 @@ class PumpDesignAgent:
         *,
         context: dict[str, Any] | None = None,
     ) -> str:
-        """Run exactly one RAG call, one deterministic workflow call, then one final LLM call."""
-
+        """Run exactly: RAG -> one deterministic workflow -> final answer."""
         client = self._get_client()
         self._state = AgentState()
-        self._requested_application = None
-        self._current_inputs = {}
+        self._requested_application = str((context or {}).get("application") or "").strip().upper()
+        self._current_inputs = dict((context or {}).get("inputs") or {})
 
-        if context:
-            self._requested_application = str(
-                context.get("application") or ""
-            ).strip().upper()
-            self._current_inputs = dict(
-                context.get("inputs") or {}
-            )
+        application = self._requested_application
+        workflow_map = {
+            "TRANSFER": "run_transfer_design",
+            "BOOSTER": "run_booster_design",
+            "SUBMERSIBLE": "run_submersible_design",
+            "HOT_WATER_RECIRCULATION": "run_hot_water_recirculation_design",
+        }
+        workflow_name = workflow_map.get(application)
+        if not workflow_name:
+            raise ValueError(f"Unsupported pump application: {application}")
 
-        messages: list[dict[str, Any]] = [
+        # Do not send the complete structured input payload to the LLM.
+        # The deterministic workflow receives it directly from _current_inputs.
+        llm_context = {
+            "application": application,
+            "user_request": user_request,
+        }
+        messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": "Minimal project context:\n" + json.dumps(llm_context, default=str)},
+            {"role": "user", "content": user_request},
         ]
+        self._state.messages = messages
 
-        if context:
-            messages.append({
-                "role": "system",
-                "content": (
-                    "Structured project context supplied by the user/app. "
-                    "Use these inputs exactly; do not invent missing values:\n"
-                    + json.dumps(context, default=str)
-                ),
-            })
-
-        messages.append({"role": "user", "content": user_request})
-
-        # ------------------------------------------------------------
-        # STAGE 1: RAG only.
-        # ------------------------------------------------------------
-        rag_tools = self._tool_schemas(
-            include_rag=True,
-            include_workflows=False,
-        )
-
+        # STAGE 1: exactly one RAG call.
         rag_response = client.chat.completions.create(
             model=self.model,
             messages=messages,
-            max_tokens=500,
-            tools=rag_tools,
-            tool_choice={
-                "type": "function",
-                "function": {"name": "get_engineering_criteria"},
-            },
-            temperature=0,
+            max_tokens=300,
+            tools=self._tool_schemas(include_rag=True),
+            tool_choice={"type": "function", "function": {"name": "get_engineering_criteria"}},
             parallel_tool_calls=False,
+            temperature=0,
         )
-
         rag_message = rag_response.choices[0].message
         rag_calls = getattr(rag_message, "tool_calls", None) or []
-        if not rag_calls:
-            raise RuntimeError(
-                "The AI did not request engineering criteria from RAG."
-            )
+        if len(rag_calls) != 1 or rag_calls[0].function.name != "get_engineering_criteria":
+            raise RuntimeError("RAG stage did not produce exactly one engineering-criteria tool call.")
 
         rag_call = rag_calls[0]
-        if rag_call.function.name != "get_engineering_criteria":
-            raise RuntimeError(
-                f"Unexpected RAG tool call: {rag_call.function.name}"
-            )
-        if len(rag_calls) != 1:
-            raise RuntimeError(
-                "RAG stage returned multiple tool calls; exactly one is allowed."
-            )
         rag_args = json.loads(rag_call.function.arguments or "{}")
-        rag_result = self._execute_tool_call(
-            rag_call.function.name,
-            rag_args,
-        )
-
+        rag_result = self._execute_tool_call("get_engineering_criteria", rag_args)
         messages.append({
             "role": "assistant",
             "content": rag_message.content or "",
             "tool_calls": [{
                 "id": rag_call.id,
                 "type": "function",
-                "function": {
-                    "name": rag_call.function.name,
-                    "arguments": rag_call.function.arguments,
-                },
+                "function": {"name": rag_call.function.name, "arguments": rag_call.function.arguments},
             }],
         })
         messages.append({
@@ -705,124 +591,59 @@ class PumpDesignAgent:
             "content": json.dumps(rag_result, default=str),
         })
 
-        # ------------------------------------------------------------
-        # STAGE 2: only the workflow relevant to the selected
-        # application is exposed. This prevents tool loops and keeps
-        # the request small.
-        # ------------------------------------------------------------
-        workflow_names = {
-            "TRANSFER": "run_transfer_design",
-            "BOOSTER": "run_booster_design",
-            "SUBMERSIBLE": "run_submersible_design",
-            "HOT_WATER_RECIRCULATION": "run_hot_water_recirc_design",
-        }
-        workflow_name = workflow_names.get(
-            self._requested_application or ""
-        )
-        if not workflow_name:
-            raise RuntimeError(
-                "A valid pump application is required before running the design workflow."
-            )
-
-        all_workflow_tools = self._tool_schemas(
-            include_rag=False,
-            include_workflows=True,
-        )
-        workflow_tools = [
-            tool for tool in all_workflow_tools
-            if tool["function"]["name"] == workflow_name
-        ]
-
+        # STAGE 2: only the selected workflow is exposed, and exactly one call is allowed.
         workflow_response = client.chat.completions.create(
             model=self.model,
-            messages=messages,
-            max_tokens=500,
-            tools=workflow_tools,
-            tool_choice={
-                "type": "function",
-                "function": {"name": workflow_name},
-            },
-            temperature=0,
+            messages=messages + [{
+                "role": "system",
+                "content": f"Now call exactly one tool: {workflow_name}. Do not call any other tool. The application inputs are controlled by the application and must not be invented or changed.",
+            }],
+            max_tokens=300,
+            tools=self._tool_schemas(include_rag=False, workflow_name=workflow_name),
+            tool_choice={"type": "function", "function": {"name": workflow_name}},
             parallel_tool_calls=False,
+            temperature=0,
         )
-
         workflow_message = workflow_response.choices[0].message
         workflow_calls = getattr(workflow_message, "tool_calls", None) or []
-        if not workflow_calls:
-            raise RuntimeError(
-                f"The AI did not execute the required {workflow_name} workflow."
-            )
+        if len(workflow_calls) != 1 or workflow_calls[0].function.name != workflow_name:
+            raise RuntimeError(f"Workflow stage did not produce exactly one {workflow_name} tool call.")
 
-        workflow_call = workflow_calls[0]
-        if workflow_call.function.name != workflow_name:
-            raise RuntimeError(
-                f"Unexpected workflow tool call: {workflow_call.function.name}"
-            )
-        if len(workflow_calls) != 1:
-            raise RuntimeError(
-                "Workflow stage returned multiple tool calls; exactly one is allowed."
-            )
-        workflow_args = json.loads(
-            workflow_call.function.arguments or "{}"
-        )
-        workflow_result = self._execute_tool_call(
-            workflow_call.function.name,
-            workflow_args,
-        )
-
-        self._state.last_tool_results.append({
-            "tool": workflow_call.function.name,
-            "result": workflow_result,
-        })
-
+        wf_call = workflow_calls[0]
+        wf_args = json.loads(wf_call.function.arguments or "{}")
+        workflow_result = self._execute_tool_call(workflow_name, wf_args)
+        self._state.last_tool_results.append({"tool": workflow_name, "result": workflow_result})
         messages.append({
             "role": "assistant",
             "content": workflow_message.content or "",
             "tool_calls": [{
-                "id": workflow_call.id,
+                "id": wf_call.id,
                 "type": "function",
-                "function": {
-                    "name": workflow_call.function.name,
-                    "arguments": workflow_call.function.arguments,
-                },
+                "function": {"name": wf_call.function.name, "arguments": wf_call.function.arguments},
             }],
         })
         messages.append({
             "role": "tool",
-            "tool_call_id": workflow_call.id,
+            "tool_call_id": wf_call.id,
             "content": json.dumps(workflow_result, default=str),
         })
 
-        # ------------------------------------------------------------
-        # STAGE 3: final explanation. No tools are exposed, so the
-        # model cannot start another tool-call round.
-        # ------------------------------------------------------------
+        # STAGE 3: no tools at all. This makes another tool-call round impossible.
         final_response = client.chat.completions.create(
             model=self.model,
             messages=messages + [{
                 "role": "system",
-                "content": (
-                    "Provide the final engineering explanation now. "
-                    "Use only the deterministic workflow result and retrieved "
-                    "criteria above. Clearly state calculated results, missing "
-                    "inputs, warnings, unresolved items, and references. "
-                    "Do not invent engineering values or manufacturer data."
-                ),
+                "content": "Provide the final engineering design response using the deterministic result and retrieved criteria. Do not call tools. If required input is missing, clearly identify it and ask for that input. Do not invent values.",
             }],
             max_tokens=800,
             tools=[],
             tool_choice="none",
             temperature=0,
-            parallel_tool_calls=False,
         )
-
         final_message = final_response.choices[0].message
-        final = final_message.content or (
-            "The deterministic engineering workflow completed, but the AI explanation was empty."
-        )
-
-        self._state.messages = messages + [{
-            "role": "assistant",
-            "content": final,
-        }]
+        final = final_message.content
+        if not final:
+            final = "The deterministic engineering calculation completed, but the AI explanation was empty."
+        self._state.messages = messages + [{"role": "assistant", "content": final}]
         return final
+
