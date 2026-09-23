@@ -1,964 +1,129 @@
 from __future__ import annotations
-
-import json
-import os
-import pickle
-import re
+import json,pickle,re
 from pathlib import Path
 from typing import Any
-
 import numpy as np
-from pydantic import ValidationError
-
 from models.engineering_contract import Criterion, CriterionType
+ROOT=Path(__file__).resolve().parents[1]
+DATA=ROOT/'data'/'standards'; INDEX=DATA/'index'
 
+def _norm(s:str)->str:return re.sub(r'[^a-z0-9_]+',' ',str(s).lower()).strip()
 
-ROOT = Path(__file__).resolve().parents[1]
-DATA = ROOT / "data" / "standards"
-INDEX = DATA / "index"
-
-
-def _norm(s: str) -> str:
-    return re.sub(
-        r"[^a-z0-9]+",
-        " ",
-        str(s).lower(),
-    ).strip()
-
-
-def _criterion_type(
-    name: str,
-    parameter: str,
-    value: Any,
-) -> CriterionType:
-
-    n = f"{name} {parameter}".lower()
-
-    if "velocity" in n:
-        return CriterionType.VELOCITY
-
-    if "pressure" in n or "prv" in n:
-        return CriterionType.PRESSURE
-
-    if "hazen" in n or parameter.lower().startswith("hazen"):
-        return CriterionType.MATERIAL
-
-    if "demand" in n or "flow" in n:
-        return CriterionType.DEMAND
-
-    if (
-        "hot" in n
-        or "recirculation" in n
-        or "temperature" in n
-    ):
-        return CriterionType.HOT_WATER
-
-    if "npsh" in n:
-        return CriterionType.NPSH
-
-    if "method" in n or "hydraulic" in n:
-        return CriterionType.HYDRAULIC_METHOD
-
-    if isinstance(value, (int, float)):
-        return CriterionType.OTHER
-
+def _criterion_type(name:str,parameter:str,topic:str='')->CriterionType:
+    n=f'{name} {parameter} {topic}'.lower()
+    if 'hazen' in n or 'hazen_williams_c' in n or parameter.lower()=='hazen_williams_c': return CriterionType.MATERIAL
+    if 'velocity' in n: return CriterionType.VELOCITY
+    if 'pressure' in n or 'prv' in n: return CriterionType.PRESSURE
+    if 'friction' in n or 'head loss' in n or 'headloss' in n or 'darcy' in n: return CriterionType.HEAD_LOSS
+    if 'demand' in n or 'flow' in n: return CriterionType.DEMAND
+    if 'hot' in n or 'recirculation' in n or 'temperature' in n: return CriterionType.HOT_WATER
+    if 'npsh' in n:return CriterionType.NPSH
+    if 'method' in n or 'hydraulic' in n:return CriterionType.HYDRAULIC_METHOD
+    if 'pump' in n:return CriterionType.PUMP
+    if 'valve' in n or 'cutoff' in n:return CriterionType.CONTROL
     return CriterionType.OTHER
 
-
-def _load_json(path: Path):
-    return json.loads(
-        path.read_text(
-            encoding="utf-8"
-        )
-    )
-
-
-def load_criteria() -> list[Criterion]:
-
-    records: list[dict[str, Any]] = []
-
-    for path in [
-        DATA
-        / "criteria"
-        / "engineering_criteria.json",
-
-        DATA
-        / "criteria"
-        / "extended_criteria.json",
-    ]:
-
-        if path.exists():
-
-            obj = _load_json(path)
-
-            if isinstance(obj, list):
-                records.extend(obj)
-
-    out: list[Criterion] = []
-    seen: set[str] = set()
-
-    for r in records:
-
-        cid = str(
-            r.get(
-                "criterion_id",
-                "",
-            )
-        ).strip()
-
-        if not cid or cid in seen:
-            continue
-
-        seen.add(cid)
-
-        value = r.get("value")
-
-        numeric_value = (
-            value
-            if isinstance(
-                value,
-                (int, float),
-            )
-            else None
-        )
-
-        min_value = None
-        max_value = None
-
-        if (
-            isinstance(value, list)
-            and len(value) == 2
-            and all(
-                isinstance(
-                    x,
-                    (int, float),
-                )
-                for x in value
-            )
-        ):
-            min_value, max_value = value
-
-        app = (
-            r.get("application")
-            or (
-                r.get("scope")
-                if r.get("scope")
-                else "all"
-            )
-        )
-
-        if isinstance(app, list):
-
-            app = ",".join(
-                str(x).lower()
-                for x in app
-            )
-
-        elif isinstance(app, str):
-
-            app = app.lower()
-
-        source_id = (
-            r.get("source_id")
-            or (
-                r.get("source_ids")
-                or [None]
-            )[0]
-        )
-
-        if not source_id:
-            source_id = "UNSPECIFIED"
-
-        note_value = (
-            r.get("notes")
-            or r.get("rule")
-            or r.get("value")
-        )
-
-        if not isinstance(
-            note_value,
-            str,
-        ):
-            note_value = json.dumps(
-                note_value,
-                sort_keys=True,
-            )
-
-        criterion = Criterion(
-            criterion_id=cid,
-
-            criterion_type=_criterion_type(
-                str(
-                    r.get(
-                        "name",
-                        "",
-                    )
-                ),
-                str(
-                    r.get(
-                        "parameter",
-                        "",
-                    )
-                ),
-                value,
-            ),
-
-            parameter=str(
-                r.get("parameter")
-                or r.get("name")
-                or cid
-            ),
-
-            value=numeric_value,
-
-            min_value=min_value,
-            max_value=max_value,
-
-            unit=r.get("unit"),
-
-            application=app,
-
-            service=r.get("service"),
-
-            jurisdiction=r.get(
-                "jurisdiction"
-            ),
-
-            applicability=str(
-                r.get("applicability")
-                or r.get("scope")
-                or "source-defined"
-            ),
-
-            method=r.get("method"),
-
-            source_reference_id=source_id,
-
-            source_status=str(
-                r.get("source_status")
-                or r.get("status")
-                or "UNVERIFIED"
-            ),
-
-            edition_year=(
-                str(
-                    r.get(
-                        "edition_year"
-                    )
-                )
-                if r.get("edition_year")
-                else None
-            ),
-
-            section=(
-                r.get("section")
-                or r.get("reference")
-            ),
-
-            page=r.get("page"),
-
-            notes=note_value,
-        )
-
-        out.append(criterion)
-
-    # --------------------------------------------------------
-    # Hazen-Williams C registry
-    # --------------------------------------------------------
-
-    hw_path = (
-        DATA
-        / "pipe_data"
-        / "hazen_williams_c_registry.json"
-    )
-
-    if hw_path.exists():
-
-        hw = _load_json(hw_path)
-
-        sources = hw.get(
-            "sources",
-            {},
-        )
-
-        for rec in hw.get(
-            "records",
-            [],
-        ):
-
-            preferred = rec.get(
-                "preferred"
-            )
-
-            if preferred is None:
-                continue
-
-            source_id = rec.get(
-                "source",
-                "UNKNOWN",
-            )
-
-            src = sources.get(
-                source_id,
-                {},
-            )
-
-            cid = (
-                f"HW-C-"
-                f"{_norm(rec.get('material', '')).replace(' ', '-')}-"
-                f"{_norm(rec.get('condition', '')).replace(' ', '-')}"
-            )
-
-            if any(
-                c.criterion_id == cid
-                for c in out
-            ):
-                continue
-
-            out.append(
-                Criterion(
-                    criterion_id=cid,
-
-                    criterion_type=CriterionType.MATERIAL,
-
-                    parameter="hazen_williams_c",
-
-                    value=float(
-                        preferred
-                    ),
-
-                    unit="dimensionless",
-
-                    application="all",
-
-                    applicability=(
-                        f"{rec.get('material')} / "
-                        f"{rec.get('condition')}"
-                    ),
-
-                    source_reference_id=source_id,
-
-                    source_status=str(
-                        rec.get(
-                            "status",
-                            "UNVERIFIED",
-                        )
-                    ),
-
-                    edition_year=(
-                        str(src.get("year"))
-                        if src.get("year")
-                        else None
-                    ),
-
-                    notes=(
-                        "Registry value; governing "
-                        "project/AHJ criterion takes precedence."
-                    ),
-                )
-            )
-
-    return out
-
-
-def load_chunks() -> list[dict[str, Any]]:
-
-    path = (
-        DATA
-        / "corpus"
-        / "chunks.jsonl"
-    )
-
-    rows = []
-
-    if path.exists():
-
-        for line in path.read_text(
-            encoding="utf-8"
-        ).splitlines():
-
-            if line.strip():
-                rows.append(
-                    json.loads(line)
-                )
-
-    return rows
-
-
-def load_sources() -> dict[str, dict[str, Any]]:
-
-    path = (
-        DATA
-        / "sources"
-        / "source_registry.json"
-    )
-
-    if not path.exists():
-        return {}
-
-    return {
-        x["source_id"]: x
-        for x in _load_json(path)
-    }
-
+def _load_json(path:Path,default): return json.loads(path.read_text(encoding='utf-8')) if path.exists() else default
 
 class RAGStore:
-    """Local RAG store.
-
-    Uses FAISS when installed; otherwise a deterministic
-    TF-IDF cosine fallback is used for local testing.
-
-    The returned engineering context is deliberately kept
-    compact because the LLM is not the numerical authority.
-    """
-
-    def __init__(
-        self,
-        *,
-        top_k: int = 6,
-    ):
-
-        self.top_k = top_k
-
-        self.criteria = load_criteria()
-
-        self.chunks = load_chunks()
-
-        self.sources = load_sources()
-
-        self.vectorizer = None
-        self.matrix = None
-        self.faiss_index = None
-
-        self._load_or_build_index()
-
-    def _load_or_build_index(self):
-
-        pkl = (
-            INDEX
-            / "tfidf_vectorizer.pkl"
-        )
-
-        npy = (
-            INDEX
-            / "tfidf_matrix.npz"
-        )
-
-        if pkl.exists() and npy.exists():
-
-            from scipy.sparse import load_npz
-
-            self.vectorizer = pickle.loads(
-                pkl.read_bytes()
-            )
-
-            self.matrix = load_npz(
-                npy
-            ).tocsr()
-
-        else:
-            self._build_tfidf()
-
-        faiss_path = (
-            INDEX
-            / "chunks.faiss"
-        )
-
-        if faiss_path.exists():
-
+    def __init__(self,*,top_k:int=8):
+        self.top_k=top_k; self.criteria=self._load_criteria(); self.chunks=self._load_chunks(); self.sources={x['source_id']:x for x in _load_json(DATA/'sources'/'source_registry.json',[])}; self.vectorizer=None; self.matrix=None; self.metadata=[]; self._load_or_build_index()
+    def _load_criteria(self):
+        rows=_load_json(DATA/'criteria'/'criteria_registry_v2.json',[]); out=[]
+        for r in rows:
             try:
-
-                import faiss
-
-                self.faiss_index = (
-                    faiss.read_index(
-                        str(faiss_path)
-                    )
-                )
-
-            except Exception:
-
-                self.faiss_index = None
-
-    def _build_tfidf(self):
-
-        from sklearn.feature_extraction.text import (
-            TfidfVectorizer,
-        )
-
+                val=r.get('value'); rng=val if isinstance(val,list) and len(val)==2 and all(isinstance(x,(int,float)) for x in val) else None
+                out.append(Criterion(criterion_id=str(r['criterion_id']),criterion_type=_criterion_type(str(r.get('name','')),str(r.get('parameter',r.get('name',''))),str(r.get('topic',''))),parameter=str(r.get('parameter') or r.get('name') or r['criterion_id']),value=val if isinstance(val,(int,float)) else None,min_value=rng[0] if rng else r.get('min_value'),max_value=rng[1] if rng else r.get('max_value'),unit=r.get('unit'),application=r.get('application'),service=r.get('service'),jurisdiction=r.get('jurisdiction') or r.get('source_location'),applicability=str(r.get('applicability') or r.get('scope') or r.get('applicability_context') or 'source-defined'),method=r.get('method'),source_reference_id=str(r.get('source_id') or 'UNSPECIFIED'),source_status=str(r.get('source_status') or r.get('status') or 'UNVERIFIED'),edition_year=str(r.get('edition_year') or '') or None,section=r.get('section') or r.get('reference'),page=r.get('page'),notes=str(r.get('notes') or ''),system=r.get('system'),subsystem=r.get('subsystem'),flow_type=r.get('flow_type'),topic=r.get('topic'),source_location=r.get('source_location'),applicability_context=r.get('applicability_context'),retrieval_tags=r.get('retrieval_tags',[])))
+            except Exception: continue
+        return out
+    def _load_chunks(self):
+        p=DATA/'corpus'/'chunks_v2.jsonl'; return [json.loads(x) for x in p.read_text(encoding='utf-8').splitlines() if x.strip()] if p.exists() else []
+    def _load_or_build_index(self):
+        pkl=INDEX/'tfidf_vectorizer.pkl'; npz=INDEX/'tfidf_matrix.npz'; meta=INDEX/'metadata.jsonl'
+        if pkl.exists() and npz.exists() and meta.exists():
+            from scipy.sparse import load_npz
+            self.vectorizer=pickle.loads(pkl.read_bytes()); self.matrix=load_npz(npz).tocsr(); self.metadata=[json.loads(x) for x in meta.read_text(encoding='utf-8').splitlines() if x.strip()]; return
+        self._build_index()
+    def _build_index(self):
+        from sklearn.feature_extraction.text import TfidfVectorizer
         from scipy.sparse import save_npz
-
-        texts = [
-            (
-                f"{c.get('heading', '')} "
-                f"{c.get('text', '')} "
-                f"{' '.join(c.get('tags', []))}"
-            )
-            for c in self.chunks
-        ]
-
-        self.vectorizer = TfidfVectorizer(
-            ngram_range=(1, 2),
-            lowercase=True,
-            norm="l2",
-        )
-
-        self.matrix = (
-            self.vectorizer
-            .fit_transform(texts)
-            .tocsr()
-        )
-
-        INDEX.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        pkl = (
-            INDEX
-            / "tfidf_vectorizer.pkl"
-        )
-
-        pkl.write_bytes(
-            pickle.dumps(
-                self.vectorizer
-            )
-        )
-
-        save_npz(
-            INDEX / "tfidf_matrix.npz",
-            self.matrix,
-        )
-
-    def _search_chunks(
-        self,
-        query: str,
-        top_k: int | None = None,
-    ) -> list[dict[str, Any]]:
-
-        k = top_k or self.top_k
-
-        if self.faiss_index is not None:
-
-            q = (
-                self.vectorizer
-                .transform([query])
-                .toarray()
-                .astype("float32")
-            )
-
-            scores, ids = (
-                self.faiss_index.search(
-                    q,
-                    min(
-                        k,
-                        len(self.chunks),
-                    ),
-                )
-            )
-
-            return [
-                {
-                    **self.chunks[i],
-                    "score": float(
-                        scores[0][j]
-                    ),
-                }
-                for j, i in enumerate(
-                    ids[0]
-                )
-                if i >= 0
-            ]
-
-        q = self.vectorizer.transform(
-            [query]
-        )
-
-        scores = (
-            self.matrix @ q.T
-        ).toarray().ravel()
-
-        order = np.argsort(
-            -scores
-        )[:k]
-
-        return [
-            {
-                **self.chunks[i],
-                "score": float(
-                    scores[i]
-                ),
-            }
-            for i in order
-            if scores[i] > 0
-        ]
-
-    def _select_mandatory_criteria(
-        self,
-        criteria: list[Criterion],
-        selected: list[Criterion],
-        query: str,
-        limit: int,
-    ) -> list[Criterion]:
-        """Keep the LLM context compact while retaining engineering-critical criteria."""
-
-        selected_ids = {
-            c.criterion_id
-            for c in selected
-        }
-
-        query_norm = _norm(query)
-
-        # ----------------------------------------------------
-        # 1. Keep one velocity criterion
-        # ----------------------------------------------------
-
-        velocity_candidates = [
-            c
-            for c in criteria
-            if c.criterion_type
-            == CriterionType.VELOCITY
-        ]
-
-        if velocity_candidates:
-
-            velocity_candidates.sort(
-                key=lambda c: (
-                    -len(
-                        set(
-                            query_norm.split()
-                        )
-                        & set(
-                            _norm(
-                                f"{c.parameter} "
-                                f"{c.applicability} "
-                                f"{c.notes or ''}"
-                            ).split()
-                        )
-                    ),
-                    c.criterion_id,
-                )
-            )
-
-            best_velocity = (
-                velocity_candidates[0]
-            )
-
-            if (
-                best_velocity.criterion_id
-                not in selected_ids
-            ):
-
-                if len(selected) >= limit:
-                    selected.pop()
-
-                selected.append(
-                    best_velocity
-                )
-
-                selected_ids.add(
-                    best_velocity.criterion_id
-                )
-
-        # ----------------------------------------------------
-        # 2. Keep one Hazen-Williams C criterion
-        # ----------------------------------------------------
-
-        hw_candidates = [
-            c
-            for c in criteria
-            if (
-                c.criterion_type
-                == CriterionType.MATERIAL
-                and c.parameter.lower()
-                in {
-                    "hazen_williams_c",
-                    "hazen_williams_c_value",
-                }
-            )
-        ]
-
-        if hw_candidates:
-
-            def hw_score(
-                c: Criterion,
-            ) -> tuple[int, int, int, str]:
-
-                text = _norm(
-                    f"{c.applicability} "
-                    f"{c.notes or ''}"
-                )
-
-                overlap = len(
-                    set(
-                        query_norm.split()
-                    )
-                    & set(
-                        text.split()
-                    )
-                )
-
-                primary = (
-                    1
-                    if "PRIMARY"
-                    in c.source_status.upper()
-                    else 0
-                )
-
-                new_pipe = (
-                    1
-                    if "new"
-                    in c.applicability.lower()
-                    else 0
-                )
-
-                return (
-                    overlap,
-                    primary,
-                    new_pipe,
-                    c.criterion_id,
-                )
-
-            hw_candidates.sort(
-                key=hw_score,
-                reverse=True,
-            )
-
-            best_hw = (
-                hw_candidates[0]
-            )
-
-            if (
-                best_hw.criterion_id
-                not in selected_ids
-            ):
-
-                if len(selected) >= limit:
-                    selected.pop()
-
-                selected.append(
-                    best_hw
-                )
-
-        # ----------------------------------------------------
-        # 3. Final hard cap
-        # ----------------------------------------------------
-
-        return selected[:limit]
-
-    def retrieve(
-        self,
-        query: str,
-        *,
-        application: str | None = None,
-        jurisdiction: str | None = None,
-        top_k: int | None = None,
-    ) -> dict[str, Any]:
-
-        app = (
-            application or ""
-        ).lower()
-
-        chunks = self._search_chunks(
-            query,
-            top_k,
-        )
-
-        # ----------------------------------------------------
-        # Filter criteria by application
-        # ----------------------------------------------------
-
-        criteria = []
-
+        records=[]
+        for c in self.chunks:
+            txt=' '.join(str(c.get(k) or '') for k in ['heading','text','topic','system','subsystem','flow_type','application','source_location','applicability_context'])+' '+' '.join(c.get('retrieval_tags',[])); records.append({'record_id':c['chunk_id'],'record_type':'chunk','text':txt,'metadata':c})
         for c in self.criteria:
-
-            capp = (
-                c.application
-                or "all"
-            ).lower()
-
-            capp_parts = {
-                x.strip()
-                for x in capp.split(",")
-            }
-
-            if (
-                app
-                and "all" not in capp_parts
-                and app not in capp_parts
-                and not (
-                    app in capp
-                    or capp in app
-                )
-            ):
-                continue
-
-            criteria.append(c)
-
-        # ----------------------------------------------------
-        # Rank criteria by lexical relevance
-        # ----------------------------------------------------
-
-        qnorm = _norm(query)
-
-        tokens = set(
-            qnorm.split()
-        )
-
-        ranked = []
-
-        for c in criteria:
-
-            text = _norm(
-                f"{c.criterion_id} "
-                f"{c.parameter} "
-                f"{c.applicability} "
-                f"{c.notes or ''}"
-            )
-
-            overlap = len(
-                tokens.intersection(
-                    text.split()
-                )
-            )
-
-            ranked.append(
-                (
-                    overlap,
-                    c,
-                )
-            )
-
-        ranked.sort(
-            key=lambda x: (
-                -x[0],
-                x[1].criterion_id,
-            )
-        )
-
-        # ----------------------------------------------------
-        # IMPORTANT:
-        # Never send more than the configured compact
-        # engineering context.
-        # ----------------------------------------------------
-
-        limit = min(
-            6,
-            max(
-                4,
-                top_k or self.top_k,
-            ),
-        )
-
-        selected = [
-            c
-            for score, c in ranked
-            if score > 0
-        ][:limit]
-
-        # ----------------------------------------------------
-        # If lexical matching is weak, fill the remaining
-        # slots with application criteria.
-        # ----------------------------------------------------
-
-        if len(selected) < limit:
-
-            selected_ids = {
-                c.criterion_id
-                for c in selected
-            }
-
-            for c in criteria:
-
-                if (
-                    c.criterion_id
-                    not in selected_ids
-                ):
-
-                    selected.append(c)
-
-                    selected_ids.add(
-                        c.criterion_id
-                    )
-
-                if len(selected) >= limit:
-                    break
-
-        # ----------------------------------------------------
-        # Always retain the engineering-critical criteria
-        # required by the deterministic workflows.
-        # ----------------------------------------------------
-
-        selected = (
-            self._select_mandatory_criteria(
-                criteria,
-                selected,
-                query,
-                limit,
-            )
-        )
-
-        return {
-            "criteria": [
-                c.model_dump(
-                    mode="json"
-                )
-                for c in selected
-            ],
-
-            "chunks": chunks,
-
-            "references": [
-                self.sources[
-                    c.source_reference_id
-                ]
-
-                for c in selected
-
-                if (
-                    c.source_reference_id
-                    in self.sources
-                )
-            ],
-        }
-
-    def retrieve_criteria(
-        self,
-        *,
-        application: str,
-        service: str | None = None,
-        jurisdiction: str | None = None,
-        query: str = "engineering criteria",
-    ) -> list[Criterion]:
-
-        result = self.retrieve(
-            (
-                f"{application} "
-                f"{service or ''} "
-                f"{jurisdiction or ''} "
-                f"{query}"
-            ),
-            application=application,
-            jurisdiction=jurisdiction,
-        )
-
-        return [
-            Criterion.model_validate(x)
-            for x in result["criteria"]
-        ]
-
-    def retriever(
-        self,
-        *,
-        application: str,
-        service: str | None = None,
-        jurisdiction: str | None = None,
-        query: str = "engineering criteria",
-    ) -> list[Criterion]:
-
-        return self.retrieve_criteria(
-            application=application,
-            service=service,
-            jurisdiction=jurisdiction,
-            query=query,
-        )
+            txt=' '.join(str(c.model_dump(mode='json').get(k) or '') for k in ['criterion_id','parameter','application','jurisdiction','applicability','notes','system','subsystem','flow_type','topic','source_location'])+' '+' '.join(c.retrieval_tags); records.append({'record_id':c.criterion_id,'record_type':'criterion','text':txt,'metadata':c.model_dump(mode='json')})
+        self.metadata=records; self.vectorizer=TfidfVectorizer(ngram_range=(1,2),lowercase=True,norm='l2'); self.matrix=self.vectorizer.fit_transform([r['text'] for r in records]).tocsr(); INDEX.mkdir(parents=True,exist_ok=True); (INDEX/'tfidf_vectorizer.pkl').write_bytes(pickle.dumps(self.vectorizer)); save_npz(INDEX/'tfidf_matrix.npz',self.matrix); (INDEX/'metadata.jsonl').write_text('\n'.join(json.dumps(x,ensure_ascii=False) for x in records)+'\n',encoding='utf-8')
+    def _topic_candidates(self,q):
+        q=_norm(q); mapping={'PIPE_VELOCITY':['velocity','velocities','speed'],'PIPE_FRICTION':['hazen','friction','head loss','headloss','darcy'],'PIPE_SIZING':['pipe size','diameter','sizing','size selection'],'PRESSURE':['pressure','residual','terminal','prv'],'DEMAND_FLOW':['flow','demand','peak','transfer time'],'STORAGE':['tank','oht','ugt','storage','reservoir'],'PUMP_HEAD':['pump head','tdh','total dynamic head'],'PUMP_PROTECTION':['booster','cutoff','relief'],'SOURCE_CAPACITY':['well yield','yield','source'],'VALVES_AIR_MANAGEMENT':['air valve','check valve','non return'],'HOT_WATER_RECIRCULATION':['hot water','recirculation','return temperature'],'NPSH':['npsh','cavitation'],'PIPE_MATERIAL':['material','steel','hdpe','pvc','ppr','copper'],'WATER_QUALITY_PROTECTION':['backflow','potable','cross connection'],'GOVERNING_CODE':['code','ahj','ipc','bcp']}; return {t for t,terms in mapping.items() if any(x in q for x in terms)}
+    def _application_context(self,application,service,query,material):
+        a=(application or '').upper(); q=(query or '').lower(); topics=self._topic_candidates(q)
+        if a=='TRANSFER': topics|={'PIPE_VELOCITY','PIPE_FRICTION','PIPE_SIZING','PUMP_HEAD','STORAGE','DEMAND_FLOW'}
+        elif a=='BOOSTER': topics|={'PIPE_VELOCITY','PIPE_FRICTION','PIPE_SIZING','PRESSURE','PUMP_HEAD'}
+        elif a=='SUBMERSIBLE': topics|={'PIPE_VELOCITY','PIPE_FRICTION','PIPE_SIZING','PUMP_HEAD','SOURCE_CAPACITY','NPSH'}
+        elif a=='HOT_WATER_RECIRCULATION': topics|={'HOT_WATER_RECIRCULATION','PIPE_FRICTION','PIPE_SIZING','PUMP_HEAD'}
+        subsystem=None
+        if a=='TRANSFER': subsystem='RISING_MAIN'
+        elif a=='BOOSTER': subsystem='BOOSTER_SYSTEM'
+        elif a=='HOT_WATER_RECIRCULATION': subsystem='HOT_WATER_LOOP'
+        return topics,subsystem
+    def _search(self,query,top_k):
+        q=self.vectorizer.transform([query]); scores=(self.matrix@q.T).toarray().ravel(); order=np.argsort(-scores); return [dict(self.metadata[i],score=float(scores[i])) for i in order[:top_k] if scores[i]>0]
+    def retrieve(self,query,*,application=None,service=None,jurisdiction=None,system='WATER_SUPPLY',flow_type='PRESSURIZED',topic=None,subsystem=None,material=None,top_k=None):
+        app_topics,app_subsystem=self._application_context(application,service,query,material); topics={topic} if topic else (self._topic_candidates(query) | app_topics); subsystem=subsystem or app_subsystem
+        # Search once per requested engineering topic, then merge. This prevents
+        # a generic storage/keyword match from crowding out critical velocity or
+        # friction criteria.
+        queries=[query+' '+str(material or '')]
+        queries += [f"{query} {t} {material or ''}" for t in sorted(topics)]
+        pool={}
+        for qq in queries:
+            for r in self._search(qq,max(12,(top_k or self.top_k)*2)):
+                rid=(r.get('record_type'),r.get('record_id'))
+                if rid not in pool or r['score']>pool[rid]['score']:
+                    pool[rid]=r
+        # Add metadata-matching criteria deterministically so critical topics cannot be lost to TF-IDF wording.
+        for c in self.criteria:
+            md=c.model_dump(mode='json')
+            if md.get('system') and md.get('system')!=system: continue
+            if flow_type and md.get('flow_type') and md.get('flow_type') not in {flow_type,'PRESSURIZED_FORCE_MAIN'}: continue
+            if topics and md.get('topic') not in topics: continue
+            score=0.02
+            tags=' '.join(str(x) for x in c.retrieval_tags).lower()
+            name=f"{c.parameter} {c.applicability} {c.application or ''}".lower()
+            if material:
+                mt=material.lower(); aliases=[]
+                if 'hdpe' in mt or 'pe100' in mt or re.search(r'\bpe\b',mt): aliases=['hdpe','pe / polyethylene','plastic','plastic pipe']
+                elif 'pvc' in mt: aliases=['pvc','plastic','plastic pipe']
+                elif 'ppr' in mt or 'pp-r' in mt: aliases=['ppr','plastic','plastic pipe']
+                elif 'steel' in mt or 'ms' in mt or 'carbon' in mt: aliases=['steel','di/ms']
+                elif 'copper' in mt: aliases=['copper','copper tubing']
+                if any(a in tags or a in name for a in aliases): score += 0.50
+            if subsystem and c.subsystem==subsystem: score += 0.25
+            rid=('criterion',c.criterion_id)
+            if rid not in pool or score>pool[rid].get('score',0): pool[rid]={'record_id':c.criterion_id,'record_type':'criterion','text':'','metadata':md,'score':score}
+        candidates=sorted(pool.values(),key=lambda x:-x['score'])
+        selected=[]
+        for r in candidates:
+            m=r.get('metadata',{}); ms=m.get('system')
+            if ms and ms!=system: continue
+            mf=m.get('flow_type')
+            if flow_type and mf and mf not in {flow_type,'PRESSURIZED_FORCE_MAIN'}: continue
+            mt=m.get('topic')
+            if topics and mt not in topics: continue
+            if subsystem and m.get('subsystem') and m.get('subsystem')!=subsystem and m.get('subsystem') not in {'DISTRIBUTION_MAIN',None}: continue
+            bonus=0.0
+            tags=' '.join(str(x) for x in m.get('retrieval_tags',[])).lower(); name=str(m.get('name','')).lower()
+            if material and any(tok in (tags+' '+name) for tok in _norm(material).split() if len(tok)>2): bonus+=0.35
+            if application and application.lower() in str(m.get('application','')).lower(): bonus+=0.10
+            if jurisdiction and jurisdiction.lower() in str(m.get('source_location','')).lower(): bonus+=0.05
+            r['score']+=bonus; selected.append(r)
+        selected=sorted(selected,key=lambda x:-x['score'])[:(top_k or self.top_k)]
+        crit=[]; refs={}
+        for r in selected:
+            if r['record_type']=='criterion':
+                c=next((x for x in self.criteria if x.criterion_id==r['record_id']),None)
+                if c: crit.append(c.model_dump(mode='json')); refs[c.source_reference_id]=self.sources.get(c.source_reference_id)
+        return {'criteria':crit,'chunks':[r.get('metadata',{})|{'score':r.get('score')} for r in selected if r['record_type']=='chunk'],'references':[x for x in refs.values() if x]}
+    def retrieve_criteria(self,*,application,service=None,jurisdiction=None,query='engineering criteria',topic=None,subsystem=None,material=None):
+        return [Criterion.model_validate(x) for x in self.retrieve(f'{application} {service or ""} {query} {material or ""}',application=application,service=service,jurisdiction=jurisdiction,topic=topic,subsystem=subsystem,material=material)['criteria']]
+    def retriever(self,**kwargs): return self.retrieve_criteria(**kwargs)
