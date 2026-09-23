@@ -44,7 +44,18 @@
       "preferred": 130,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "ABS"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Aluminum",
@@ -54,7 +65,18 @@
       "preferred": null,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Aluminum"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Asbestos cement",
@@ -64,7 +86,18 @@
       "preferred": 140,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Asbestos cement"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Asphalt-lined pipe",
@@ -74,7 +107,18 @@
       "preferred": null,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Asphalt-lined pipe"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Brass",
@@ -84,7 +128,18 @@
       "preferred": null,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Brass"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Brick sewer",
@@ -94,7 +149,18 @@
       "preferred": null,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "SEWERAGE",
+      "flow_type": "GRAVITY_OPEN_CHANNEL",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "SEWERAGE",
+        "GRAVITY_OPEN_CHANNEL",
+        "Brick sewer"
+      ],
+      "applicability_context": "Sewerage material/reference; excluded from potable water-supply retrieval."
     },
     {
       "material": "Cast iron",
@@ -104,7 +170,18 @@
       "preferred": 130,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Cast iron"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Cast iron",
@@ -114,7 +191,18 @@
       "preferred": 110,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Cast iron"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Cast iron",
@@ -124,7 +212,18 @@
       "preferred": null,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Cast iron"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Cast iron",
@@ -134,7 +233,18 @@
       "preferred": null,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Cast iron"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Cast iron",
@@ -144,7 +254,18 @@
       "preferred": null,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Cast iron"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Cast iron",
@@ -154,7 +275,18 @@
       "preferred": 100,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Cast iron"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Cast iron",
@@ -164,7 +296,18 @@
       "preferred": 140,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Cast iron"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Cast iron",
@@ -174,7 +317,18 @@
       "preferred": 140,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Cast iron"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Cast iron",
@@ -184,7 +338,18 @@
       "preferred": 120,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Cast iron"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Cement lining",
@@ -194,7 +359,18 @@
       "preferred": null,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Cement lining"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Concrete",
@@ -204,7 +380,18 @@
       "preferred": null,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Concrete"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Concrete",
@@ -214,7 +401,18 @@
       "preferred": null,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Concrete"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Concrete",
@@ -224,7 +422,18 @@
       "preferred": 140,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Concrete"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Concrete",
@@ -234,7 +443,18 @@
       "preferred": 120,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Concrete"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Copper",
@@ -244,7 +464,18 @@
       "preferred": null,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Copper"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Corrugated metal",
@@ -254,7 +485,18 @@
       "preferred": 60,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Corrugated metal"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Ductile iron",
@@ -264,7 +506,18 @@
       "preferred": 140,
       "unit": "dimensionless",
       "source": "DIPRA_C_VALUE",
-      "status": "PRIMARY_INDUSTRY_REFERENCE"
+      "status": "PRIMARY_INDUSTRY_REFERENCE",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Ductile iron"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Ductile iron",
@@ -274,7 +527,18 @@
       "preferred": 140,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Ductile iron"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Fiber cement",
@@ -284,7 +548,18 @@
       "preferred": 140,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Fiber cement"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Fiberglass / FRP",
@@ -294,7 +569,18 @@
       "preferred": 150,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Fiberglass / FRP"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Galvanized iron",
@@ -304,7 +590,18 @@
       "preferred": 120,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Galvanized iron"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Glass",
@@ -314,7 +611,18 @@
       "preferred": 130,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Glass"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Lead",
@@ -324,7 +632,18 @@
       "preferred": null,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Lead"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "PE / polyethylene",
@@ -334,7 +653,18 @@
       "preferred": 140,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "PE / polyethylene"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "PVC / CPVC",
@@ -344,7 +674,18 @@
       "preferred": 150,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "PVC / CPVC"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Plastic",
@@ -354,7 +695,18 @@
       "preferred": 150,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Plastic"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Steel",
@@ -364,7 +716,18 @@
       "preferred": 140,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Steel"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Steel",
@@ -377,7 +740,18 @@
       "status": "PRIMARY_GENERAL_REFERENCE",
       "notes": [
         "ASHRAE states values can be 100 and below for badly corroded or very rough pipe. This is not a hard lower limit."
-      ]
+      ],
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Steel"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Steel",
@@ -387,7 +761,18 @@
       "preferred": null,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Steel"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Steel",
@@ -397,7 +782,18 @@
       "preferred": 60,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Steel"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Steel",
@@ -407,7 +803,18 @@
       "preferred": 110,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Steel"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Steel",
@@ -417,7 +824,18 @@
       "preferred": 100,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Steel"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Steel",
@@ -427,7 +845,18 @@
       "preferred": null,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Steel"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Vitrified clay",
@@ -437,7 +866,18 @@
       "preferred": 110,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "SEWERAGE",
+      "flow_type": "GRAVITY_OPEN_CHANNEL",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "SEWERAGE",
+        "GRAVITY_OPEN_CHANNEL",
+        "Vitrified clay"
+      ],
+      "applicability_context": "Sewerage material/reference; excluded from potable water-supply retrieval."
     },
     {
       "material": "Wrought iron",
@@ -447,7 +887,18 @@
       "preferred": 100,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Wrought iron"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Wood / masonry pipe",
@@ -457,7 +908,18 @@
       "preferred": 120,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Wood / masonry pipe"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Wood stave",
@@ -467,7 +929,18 @@
       "preferred": null,
       "unit": "dimensionless",
       "source": "ENGINEERING_TOOLBOX_HW",
-      "status": "SECONDARY"
+      "status": "SECONDARY",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Wood stave"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Plastic pipe",
@@ -477,7 +950,18 @@
       "preferred": 150,
       "unit": "dimensionless",
       "source": "ASHRAE_F25_CH22",
-      "status": "PRIMARY_GENERAL_REFERENCE"
+      "status": "PRIMARY_GENERAL_REFERENCE",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Plastic pipe"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Copper tubing",
@@ -487,7 +971,18 @@
       "preferred": 150,
       "unit": "dimensionless",
       "source": "ASHRAE_F25_CH22",
-      "status": "PRIMARY_GENERAL_REFERENCE"
+      "status": "PRIMARY_GENERAL_REFERENCE",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Copper tubing"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     },
     {
       "material": "Steel pipe",
@@ -497,7 +992,18 @@
       "preferred": 140,
       "unit": "dimensionless",
       "source": "ASHRAE_F25_CH22",
-      "status": "PRIMARY_GENERAL_REFERENCE"
+      "status": "PRIMARY_GENERAL_REFERENCE",
+      "system": "WATER_SUPPLY",
+      "flow_type": "PRESSURIZED",
+      "topic": "PIPE_FRICTION",
+      "criterion_kind": "hazen_williams_c",
+      "retrieval_tags": [
+        "PIPE_FRICTION",
+        "WATER_SUPPLY",
+        "PRESSURIZED",
+        "Steel pipe"
+      ],
+      "applicability_context": "Pressurized water-pipe friction reference; applicability depends on material, condition, source hierarchy and project context."
     }
   ]
 }

@@ -3433,5 +3433,11 @@
     "Plastic IDs are derived from nominal OD and the listed minimum/nominal wall thickness; verify actual manufacturer dimensions before final construction issue.",
     "The imperial values for ISO metric systems are conversions for user display/calculation convenience; the governing size designation remains metric.",
     "Ductile iron, stainless steel, CPVC and specialty systems are not dimension-populated in this version."
-  ]
+  ],
+  "retrieval_metadata": {
+    "system": "WATER_SUPPLY",
+    "flow_type": "PRESSURIZED",
+    "topic": "PIPE_MATERIAL",
+    "source_location": "Multiple standards; see source record per pipe family"
+  }
 }
