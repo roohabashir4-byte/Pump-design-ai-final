@@ -54,6 +54,15 @@ class Criterion(BaseModel):
     section: Optional[str] = None
     page: Optional[str] = None
     notes: Optional[str] = None
+    # Topic-first RAG provenance metadata. These fields do not contain
+    # engineering constants; they describe classification/applicability.
+    system: Optional[str] = None
+    subsystem: Optional[str] = None
+    flow_type: Optional[str] = None
+    topic: Optional[str] = None
+    source_location: Optional[str] = None
+    applicability_context: Optional[str] = None
+    retrieval_tags: list[str] = Field(default_factory=list)
 
 
 class WaterProperties(BaseModel):
