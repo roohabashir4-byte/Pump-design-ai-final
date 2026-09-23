@@ -35,9 +35,11 @@ class AgentState:
 class PumpDesignAgent:
     """Orchestrates LLM reasoning, RAG retrieval and deterministic workflows.
 
-    ``rag_retriever`` must return a list of Criterion objects or dictionaries
-    representing the same fields. It is intentionally injected so the agent can
-    later connect to FAISS/vector RAG without changing the orchestration layer.
+    The LLM handles engineering reasoning and orchestration.
+
+    RAG supplies engineering criteria.
+
+    Deterministic engineering workflows remain the numerical authority.
     """
 
     def __init__(
@@ -45,19 +47,32 @@ class PumpDesignAgent:
         *,
         model: str | None = None,
         api_key: str | None = None,
-        rag_retriever: Callable[..., list[Criterion | dict[str, Any]]] | None = None,
-        max_tool_rounds: int = 8,
+        rag_retriever: Callable[
+            ...,
+            list[Criterion | dict[str, Any]]
+        ]
+        | None = None,
+        max_tool_rounds: int = 4,
         client: Any | None = None,
     ):
         self.model = model or os.getenv(
             "GROQ_MODEL",
             "openai/gpt-oss-120b",
         )
-        self.api_key = api_key or os.getenv("GROQ_API_KEY")
+
+        self.api_key = (
+            api_key
+            or os.getenv("GROQ_API_KEY")
+        )
+
         self.rag_retriever = rag_retriever
+
         self.max_tool_rounds = max_tool_rounds
+
         self._state = AgentState()
+
         self._client = client
+
         self.router = build_engineering_router(
             lambda: self._state.rag_context
         )
@@ -67,6 +82,7 @@ class PumpDesignAgent:
         return self._state
 
     def _get_client(self):
+
         if self._client is not None:
             return self._client
 
@@ -82,7 +98,10 @@ class PumpDesignAgent:
                 "Install the 'groq' package before running the LLM agent."
             ) from exc
 
-        self._client = Groq(api_key=self.api_key)
+        self._client = Groq(
+            api_key=self.api_key
+        )
+
         return self._client
 
     def _rag_context(
@@ -95,36 +114,42 @@ class PumpDesignAgent:
     ) -> dict[str, Any]:
 
         if self.rag_retriever is None:
-            raise RuntimeError("No RAG retriever is configured.")
+            raise RuntimeError(
+                "No RAG retriever is configured."
+            )
 
-        retrieval_query = query or application
+        retrieval_query = (
+            query
+            or application
+        )
 
         if material:
             retrieval_query = (
                 f"{retrieval_query} "
                 f"{material} "
-                f"Hazen Williams pipe material"
+                "Hazen Williams pipe material"
             )
 
-        # IMPORTANT:
-        # Pass the structured pipe material to the RAG store.
-        # This allows the pipe engineering registry to return the
-        # applicable Hazen-Williams C value deterministically.
         raw = self.rag_retriever(
             application=application,
             service=service,
             jurisdiction=jurisdiction,
             query=retrieval_query,
-            material=material,
         )
 
         criteria: list[Criterion] = []
 
         for item in raw:
+
             criteria.append(
                 item
-                if isinstance(item, Criterion)
-                else Criterion.model_validate(item)
+                if isinstance(
+                    item,
+                    Criterion,
+                )
+                else Criterion.model_validate(
+                    item
+                )
             )
 
         packet = build_criteria_packet(
@@ -137,14 +162,16 @@ class PumpDesignAgent:
         velocity = [
             c
             for c in packet
-            if c.criterion_type.value == "VELOCITY"
+            if c.criterion_type.value
+            == "VELOCITY"
         ]
 
         hw = [
             c
             for c in packet
             if (
-                c.criterion_type.value == "MATERIAL"
+                c.criterion_type.value
+                == "MATERIAL"
                 and c.parameter.lower()
                 in {
                     "hazen_williams_c",
@@ -153,19 +180,24 @@ class PumpDesignAgent:
             )
         ]
 
-        # The existing deterministic workflows accept one velocity
-        # criterion object and one Hazen-Williams C value.
-        # Do not silently choose between conflicting records.
+        # ----------------------------------------------------
+        # Resolve Hazen-Williams C by material
+        # ----------------------------------------------------
+
         if material:
+
             mat = material.lower()
 
             aliases = [mat]
 
-            if "steel" in mat or mat in {
-                "ms",
-                "carbon steel",
-                "ms/carbon steel",
-            }:
+            if (
+                "steel" in mat
+                or mat in {
+                    "ms",
+                    "carbon steel",
+                    "ms/carbon steel",
+                }
+            ):
                 aliases.extend(
                     [
                         "steel",
@@ -181,12 +213,25 @@ class PumpDesignAgent:
                     ]
                 )
 
-            if "hdpe" in mat or "pe" in mat:
+            if (
+                "hdpe" in mat
+                or "pe" in mat
+            ):
                 aliases.extend(
                     [
                         "pe / polyethylene",
                         "plastic pipe",
                         "plastic",
+                    ]
+                )
+
+            if "ppr" in mat:
+                aliases.extend(
+                    [
+                        "ppr",
+                        "pp-r",
+                        "polypropylene",
+                        "plastic pipe",
                     ]
                 )
 
@@ -202,39 +247,60 @@ class PumpDesignAgent:
                 c
                 for c in hw
                 if any(
-                    alias in c.applicability.lower()
+                    alias
+                    in c.applicability.lower()
                     for alias in aliases
                 )
             ]
 
+        # ----------------------------------------------------
+        # Resolve conflicting Hazen-Williams records
+        # ----------------------------------------------------
+
         if len(hw) > 1:
+
             primary = [
                 c
                 for c in hw
-                if "PRIMARY" in c.source_status.upper()
+                if (
+                    "PRIMARY"
+                    in c.source_status.upper()
+                )
             ]
 
             new_pipe = [
                 c
                 for c in primary
-                if "new" in c.applicability.lower()
+                if (
+                    "new"
+                    in c.applicability.lower()
+                )
             ]
 
             if len(new_pipe) == 1:
+
                 hw = new_pipe
 
             elif len(primary) == 1:
+
                 hw = primary
 
             else:
+
                 raise ValueError(
-                    "Multiple Hazen-Williams C criteria matched; "
-                    "source precedence/pipe condition must be resolved first."
+                    "Multiple Hazen-Williams C criteria "
+                    "matched; source precedence/pipe "
+                    "condition must be resolved first."
                 )
+
+        # ----------------------------------------------------
+        # Resolve velocity criteria
+        # ----------------------------------------------------
 
         velocity_context: dict[str, float] = {}
 
         for c in velocity:
+
             key = c.parameter.lower()
 
             if (
@@ -246,15 +312,23 @@ class PumpDesignAgent:
                 }
                 and c.value is not None
             ):
+
                 if (
-                    "min_mps" in velocity_context
-                    and velocity_context["min_mps"] != c.value
+                    "min_mps"
+                    in velocity_context
+                    and velocity_context[
+                        "min_mps"
+                    ]
+                    != c.value
                 ):
                     raise ValueError(
-                        "Conflicting minimum velocity criteria matched."
+                        "Conflicting minimum velocity "
+                        "criteria matched."
                     )
 
-                velocity_context["min_mps"] = c.value
+                velocity_context[
+                    "min_mps"
+                ] = c.value
 
             elif (
                 key
@@ -265,32 +339,45 @@ class PumpDesignAgent:
                 }
                 and c.value is not None
             ):
+
                 if (
-                    "max_mps" in velocity_context
-                    and velocity_context["max_mps"] != c.value
+                    "max_mps"
+                    in velocity_context
+                    and velocity_context[
+                        "max_mps"
+                    ]
+                    != c.value
                 ):
                     raise ValueError(
-                        "Conflicting maximum velocity criteria matched."
+                        "Conflicting maximum velocity "
+                        "criteria matched."
                     )
 
-                velocity_context["max_mps"] = c.value
+                velocity_context[
+                    "max_mps"
+                ] = c.value
 
         self._state.rag_context = {
             "criteria": [
-                c.model_dump(mode="json")
+                c.model_dump(
+                    mode="json"
+                )
                 for c in packet
             ],
+
             "references": sorted(
                 {
                     c.source_reference_id
                     for c in packet
                 }
             ),
+
             "velocity_criteria": (
                 velocity_context
                 if velocity_context
                 else None
             ),
+
             "hazen_williams_c": (
                 hw[0].value
                 if hw
@@ -306,7 +393,10 @@ class PumpDesignAgent:
     ) -> dict[str, Any]:
 
         app_raw = str(
-            args.get("application", "")
+            args.get(
+                "application",
+                "",
+            )
         ).lower().strip()
 
         application = APPLICATIONS.get(
@@ -321,7 +411,8 @@ class PumpDesignAgent:
             "HOT_WATER_RECIRCULATION",
         }:
             raise ValueError(
-                f"Unsupported pump application: {application}"
+                f"Unsupported pump application: "
+                f"{application}"
             )
 
         return self._rag_context(
@@ -340,27 +431,37 @@ class PumpDesignAgent:
             {
                 "type": "function",
                 "function": {
-                    "name": "get_engineering_criteria",
-                    "description": RAG_TOOL_DESCRIPTION,
+                    "name":
+                        "get_engineering_criteria",
+
+                    "description":
+                        RAG_TOOL_DESCRIPTION,
+
                     "parameters": {
                         "type": "object",
+
                         "properties": {
                             "application": {
                                 "type": "string"
                             },
+
                             "service": {
                                 "type": "string"
                             },
+
                             "jurisdiction": {
                                 "type": "string"
                             },
+
                             "query": {
                                 "type": "string"
                             },
+
                             "material": {
                                 "type": "string"
                             },
                         },
+
                         "required": [
                             "application"
                         ],
@@ -370,14 +471,19 @@ class PumpDesignAgent:
         ]
 
         for name in self.router.available_tools():
+
             tool = self.router.get(name)
 
             schemas.append(
                 {
                     "type": "function",
+
                     "function": {
                         "name": name,
-                        "description": tool.description,
+
+                        "description":
+                            tool.description,
+
                         "parameters": (
                             tool.input_schema
                             or {
@@ -398,54 +504,69 @@ class PumpDesignAgent:
     ) -> Any:
 
         if name == "get_engineering_criteria":
+
             return self._rag_tool(args)
 
-        if name not in self.router.available_tools():
+        if (
+            name
+            not in self.router.available_tools()
+        ):
             raise LookupError(
                 f"Unknown agent tool: {name}"
             )
 
-        # The LLM is not allowed to call a workflow
-        # before RAG context exists.
         if not self._state.rag_context:
+
             raise RuntimeError(
                 "Engineering criteria must be retrieved "
                 "before running a design workflow."
             )
 
-        # Workflows are deterministic;
-        # the router is the numerical authority.
         from models.engineering_contract import (
             CalculationRequest,
         )
 
         req = CalculationRequest(
-            request_id=str(uuid.uuid4()),
+            request_id=str(
+                uuid.uuid4()
+            ),
+
             application=name,
+
             tool_name=name,
+
             inputs=args,
+
             purpose=(
-                "Agent-orchestrated pump design calculation"
+                "Agent-orchestrated "
+                "pump design calculation"
             ),
         )
 
-        result = self.router.execute(req)
+        result = self.router.execute(
+            req
+        )
 
-        return result.model_dump(mode="json")
+        return result.model_dump(
+            mode="json"
+        )
 
     def run(
         self,
         user_request: str,
         *,
-        context: dict[str, Any] | None = None,
+        context: dict[str, Any]
+        | None = None,
     ) -> str:
-        """Run the agent tool loop and return the final engineering explanation."""
+        """Run controlled RAG → workflow → final-answer orchestration."""
 
         client = self._get_client()
 
         self._state = AgentState()
 
-        messages: list[dict[str, Any]] = [
+        messages: list[
+            dict[str, Any]
+        ] = [
             {
                 "role": "system",
                 "content": SYSTEM_PROMPT,
@@ -453,12 +574,14 @@ class PumpDesignAgent:
         ]
 
         if context:
+
             messages.append(
                 {
                     "role": "system",
+
                     "content": (
-                        "Structured project context supplied "
-                        "by the user/app:\n"
+                        "Structured project context "
+                        "supplied by the user/app:\n"
                         + json.dumps(
                             context,
                             default=str,
@@ -476,39 +599,67 @@ class PumpDesignAgent:
 
         self._state.messages = messages
 
+        rag_completed = False
+        workflow_completed = False
+
         for round_index in range(
             self.max_tool_rounds
         ):
-            # IMPORTANT:
-            # Before engineering criteria have been retrieved,
-            # force the exact RAG function name.
-            #
-            # This prevents GPT-OSS from inventing malformed
-            # function names such as:
-            # "get_engineering Prod_criteria"
-            #
-            # After RAG is available, normal tool selection
-            # resumes so the agent remains agentic.
-            if not self._state.rag_context:
+
+            # ------------------------------------------------
+            # STAGE 1
+            # RAG must happen first.
+            # ------------------------------------------------
+
+            if not rag_completed:
+
                 tool_choice: Any = {
                     "type": "function",
                     "function": {
-                        "name": "get_engineering_criteria"
+                        "name":
+                            "get_engineering_criteria"
                     },
                 }
-            else:
+
+            # ------------------------------------------------
+            # STAGE 2
+            # Allow the LLM to select the appropriate
+            # deterministic engineering workflow.
+            # ------------------------------------------------
+
+            elif not workflow_completed:
+
                 tool_choice = "auto"
 
-            response = client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                max_tokens=800,
-                tools=self._tool_schemas(),
-                tool_choice=tool_choice,
-                temperature=0,
+            # ------------------------------------------------
+            # STAGE 3
+            # Numerical workflow has already executed.
+            # Force the model to provide the final explanation.
+            # ------------------------------------------------
+
+            else:
+
+                tool_choice = "none"
+
+            response = (
+                client.chat.completions.create(
+                    model=self.model,
+
+                    messages=messages,
+
+                    max_tokens=800,
+
+                    tools=self._tool_schemas(),
+
+                    tool_choice=tool_choice,
+
+                    temperature=0,
+                )
             )
 
-            message = response.choices[0].message
+            message = (
+                response.choices[0].message
+            )
 
             tool_calls = (
                 getattr(
@@ -519,10 +670,19 @@ class PumpDesignAgent:
                 or []
             )
 
+            # ------------------------------------------------
+            # Final response
+            # ------------------------------------------------
+
             if not tool_calls:
+
                 final = (
                     message.content
-                    or "No final response was returned by the model."
+                    or (
+                        "The deterministic engineering "
+                        "calculation completed, but the "
+                        "AI explanation was empty."
+                    )
                 )
 
                 self._state.messages = (
@@ -537,68 +697,138 @@ class PumpDesignAgent:
 
                 return final
 
-            assistant_message: dict[str, Any] = {
+            # ------------------------------------------------
+            # Build ONE assistant tool-call message.
+            # ------------------------------------------------
+
+            assistant_message: dict[
+                str,
+                Any,
+            ] = {
                 "role": "assistant",
-                "content": message.content or "",
+
+                "content":
+                    message.content or "",
+
                 "tool_calls": [],
             }
 
+            tool_results_for_round = []
+
             for call in tool_calls:
+
                 fn = call.function
+
                 call_id = call.id
 
                 try:
+
                     args = json.loads(
-                        fn.arguments or "{}"
+                        fn.arguments
+                        or "{}"
                     )
 
-                    result = self._execute_tool_call(
-                        fn.name,
-                        args,
+                    result = (
+                        self._execute_tool_call(
+                            fn.name,
+                            args,
+                        )
                     )
 
                     if (
                         fn.name
-                        != "get_engineering_criteria"
+                        == "get_engineering_criteria"
                     ):
+
+                        rag_completed = True
+
+                    else:
+
+                        workflow_completed = True
+
                         self._state.last_tool_results.append(
                             {
-                                "tool": fn.name,
-                                "result": result,
+                                "tool":
+                                    fn.name,
+
+                                "result":
+                                    result,
                             }
                         )
 
                 except Exception as exc:
+
                     result = {
-                        "status": "TOOL_ERROR",
-                        "message": str(exc),
+                        "status":
+                            "TOOL_ERROR",
+
+                        "message":
+                            str(exc),
                     }
 
                 assistant_message[
                     "tool_calls"
                 ].append(
                     {
-                        "id": call_id,
-                        "type": "function",
+                        "id":
+                            call_id,
+
+                        "type":
+                            "function",
+
                         "function": {
-                            "name": fn.name,
-                            "arguments": fn.arguments,
+                            "name":
+                                fn.name,
+
+                            "arguments":
+                                fn.arguments,
                         },
                     }
                 )
 
-                messages.append(
-                    assistant_message
+                tool_results_for_round.append(
+                    {
+                        "tool_call_id":
+                            call_id,
+
+                        "content":
+                            json.dumps(
+                                result,
+                                default=str,
+                            ),
+                    }
                 )
+
+            # ------------------------------------------------
+            # Append assistant message ONCE.
+            #
+            # This also fixes the previous message-history
+            # construction where the same assistant message
+            # could be appended repeatedly.
+            # ------------------------------------------------
+
+            messages.append(
+                assistant_message
+            )
+
+            for tool_result in (
+                tool_results_for_round
+            ):
 
                 messages.append(
                     {
-                        "role": "tool",
-                        "tool_call_id": call_id,
-                        "content": json.dumps(
-                            result,
-                            default=str,
-                        ),
+                        "role":
+                            "tool",
+
+                        "tool_call_id":
+                            tool_result[
+                                "tool_call_id"
+                            ],
+
+                        "content":
+                            tool_result[
+                                "content"
+                            ],
                     }
                 )
 
