@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 import pickle
 import re
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+from pydantic import ValidationError
 
 from models.engineering_contract import Criterion, CriterionType
 
@@ -17,7 +19,11 @@ INDEX = DATA / "index"
 
 
 def _norm(s: str) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", str(s).lower()).strip()
+    return re.sub(
+        r"[^a-z0-9]+",
+        " ",
+        str(s).lower(),
+    ).strip()
 
 
 def _criterion_type(
@@ -25,160 +31,94 @@ def _criterion_type(
     parameter: str,
     value: Any,
 ) -> CriterionType:
-    text = f"{name} {parameter}".lower()
 
-    if "velocity" in text:
+    n = f"{name} {parameter}".lower()
+
+    if "velocity" in n:
         return CriterionType.VELOCITY
 
-    if "pressure" in text or "prv" in text:
+    if "pressure" in n or "prv" in n:
         return CriterionType.PRESSURE
 
-    if "hazen" in text or parameter.lower().startswith("hazen"):
+    if "hazen" in n or parameter.lower().startswith("hazen"):
         return CriterionType.MATERIAL
 
-    if "demand" in text or "flow" in text:
+    if "demand" in n or "flow" in n:
         return CriterionType.DEMAND
 
     if (
-        "hot" in text
-        or "recirculation" in text
-        or "temperature" in text
+        "hot" in n
+        or "recirculation" in n
+        or "temperature" in n
     ):
         return CriterionType.HOT_WATER
 
-    if "npsh" in text:
+    if "npsh" in n:
         return CriterionType.NPSH
 
-    if "method" in text or "hydraulic" in text:
+    if "method" in n or "hydraulic" in n:
         return CriterionType.HYDRAULIC_METHOD
+
+    if isinstance(value, (int, float)):
+        return CriterionType.OTHER
 
     return CriterionType.OTHER
 
 
-def _load_json(path: Path) -> Any:
+def _load_json(path: Path):
     return json.loads(
-        path.read_text(encoding="utf-8")
+        path.read_text(
+            encoding="utf-8"
+        )
     )
 
 
-def _material_aliases(material: str) -> set[str]:
-    """
-    Convert the user's pipe-material name into normalized
-    material-family aliases.
-
-    This function does not invent an engineering value.
-    It only performs deterministic material matching.
-    """
-    value = _norm(material)
-
-    aliases = {value}
-
-    if (
-        "steel" in value
-        or value in {
-            "ms",
-            "carbon steel",
-            "ms carbon steel",
-            "mild steel",
-        }
-    ):
-        aliases.update(
-            {
-                "steel",
-                "steel pipe",
-                "carbon steel",
-                "ms carbon steel",
-                "mild steel",
-            }
-        )
-
-    if "pvc" in value:
-        aliases.update(
-            {
-                "pvc",
-                "pvc u",
-                "plastic pipe",
-                "plastic",
-            }
-        )
-
-    if (
-        "hdpe" in value
-        or "polyethylene" in value
-        or value in {"pe", "pe 100"}
-    ):
-        aliases.update(
-            {
-                "hdpe",
-                "pe",
-                "pe 100",
-                "polyethylene",
-                "pe polyethylene",
-                "plastic pipe",
-                "plastic",
-            }
-        )
-
-    if (
-        "ppr" in value
-        or "pp r" in value
-        or "polypropylene" in value
-    ):
-        aliases.update(
-            {
-                "ppr",
-                "pp r",
-                "polypropylene",
-                "plastic pipe",
-                "plastic",
-            }
-        )
-
-    if "copper" in value:
-        aliases.update(
-            {
-                "copper",
-                "copper tubing",
-            }
-        )
-
-    return aliases
-
-
 def load_criteria() -> list[Criterion]:
+
     records: list[dict[str, Any]] = []
 
     for path in [
-        DATA / "criteria" / "engineering_criteria.json",
-        DATA / "criteria" / "extended_criteria.json",
+        DATA
+        / "criteria"
+        / "engineering_criteria.json",
+
+        DATA
+        / "criteria"
+        / "extended_criteria.json",
     ]:
+
         if path.exists():
+
             obj = _load_json(path)
 
             if isinstance(obj, list):
                 records.extend(obj)
 
-    criteria: list[Criterion] = []
+    out: list[Criterion] = []
     seen: set[str] = set()
 
-    for record in records:
-        criterion_id = str(
-            record.get("criterion_id", "")
+    for r in records:
+
+        cid = str(
+            r.get(
+                "criterion_id",
+                "",
+            )
         ).strip()
 
-        if not criterion_id:
+        if not cid or cid in seen:
             continue
 
-        if criterion_id in seen:
-            continue
+        seen.add(cid)
 
-        seen.add(criterion_id)
-
-        value = record.get("value")
+        value = r.get("value")
 
         numeric_value = (
             value
-            if isinstance(value, (int, float))
+            if isinstance(
+                value,
+                (int, float),
+            )
             else None
         )
 
@@ -189,102 +129,143 @@ def load_criteria() -> list[Criterion]:
             isinstance(value, list)
             and len(value) == 2
             and all(
-                isinstance(x, (int, float))
+                isinstance(
+                    x,
+                    (int, float),
+                )
                 for x in value
             )
         ):
             min_value, max_value = value
 
-        application = (
-            record.get("application")
-            or record.get("scope")
-            or "all"
+        app = (
+            r.get("application")
+            or (
+                r.get("scope")
+                if r.get("scope")
+                else "all"
+            )
         )
 
-        if isinstance(application, list):
-            application = ",".join(
+        if isinstance(app, list):
+
+            app = ",".join(
                 str(x).lower()
-                for x in application
+                for x in app
             )
-        else:
-            application = str(application).lower()
+
+        elif isinstance(app, str):
+
+            app = app.lower()
 
         source_id = (
-            record.get("source_id")
-            or (record.get("source_ids") or [None])[0]
-            or "UNSPECIFIED"
+            r.get("source_id")
+            or (
+                r.get("source_ids")
+                or [None]
+            )[0]
         )
 
-        notes = (
-            record.get("notes")
-            or record.get("rule")
-            or record.get("value")
+        if not source_id:
+            source_id = "UNSPECIFIED"
+
+        note_value = (
+            r.get("notes")
+            or r.get("rule")
+            or r.get("value")
         )
 
-        if not isinstance(notes, str):
-            notes = json.dumps(
-                notes,
+        if not isinstance(
+            note_value,
+            str,
+        ):
+            note_value = json.dumps(
+                note_value,
                 sort_keys=True,
             )
 
-        criteria.append(
-            Criterion(
-                criterion_id=criterion_id,
-                criterion_type=_criterion_type(
-                    str(record.get("name", "")),
-                    str(
-                        record.get(
-                            "parameter",
-                            "",
-                        )
-                    ),
-                    value,
+        criterion = Criterion(
+            criterion_id=cid,
+
+            criterion_type=_criterion_type(
+                str(
+                    r.get(
+                        "name",
+                        "",
+                    )
                 ),
-                parameter=str(
-                    record.get("parameter")
-                    or record.get("name")
-                    or criterion_id
+                str(
+                    r.get(
+                        "parameter",
+                        "",
+                    )
                 ),
-                value=numeric_value,
-                min_value=min_value,
-                max_value=max_value,
-                unit=record.get("unit"),
-                application=application,
-                service=record.get("service"),
-                jurisdiction=record.get("jurisdiction"),
-                applicability=str(
-                    record.get("applicability")
-                    or record.get("scope")
-                    or "source-defined"
-                ),
-                method=record.get("method"),
-                source_reference_id=source_id,
-                source_status=str(
-                    record.get("source_status")
-                    or record.get("status")
-                    or "UNVERIFIED"
-                ),
-                edition_year=(
-                    str(record.get("edition_year"))
-                    if record.get("edition_year")
-                    else None
-                ),
-                section=(
-                    record.get("section")
-                    or record.get("reference")
-                ),
-                page=record.get("page"),
-                notes=notes,
-            )
+                value,
+            ),
+
+            parameter=str(
+                r.get("parameter")
+                or r.get("name")
+                or cid
+            ),
+
+            value=numeric_value,
+
+            min_value=min_value,
+            max_value=max_value,
+
+            unit=r.get("unit"),
+
+            application=app,
+
+            service=r.get("service"),
+
+            jurisdiction=r.get(
+                "jurisdiction"
+            ),
+
+            applicability=str(
+                r.get("applicability")
+                or r.get("scope")
+                or "source-defined"
+            ),
+
+            method=r.get("method"),
+
+            source_reference_id=source_id,
+
+            source_status=str(
+                r.get("source_status")
+                or r.get("status")
+                or "UNVERIFIED"
+            ),
+
+            edition_year=(
+                str(
+                    r.get(
+                        "edition_year"
+                    )
+                )
+                if r.get("edition_year")
+                else None
+            ),
+
+            section=(
+                r.get("section")
+                or r.get("reference")
+            ),
+
+            page=r.get("page"),
+
+            notes=note_value,
         )
 
-    # ---------------------------------------------------------------
+        out.append(criterion)
+
+    # --------------------------------------------------------
     # Hazen-Williams C registry
-    # ---------------------------------------------------------------
-    #
-    # This is structured engineering data.
-    # It is loaded directly instead of relying on text-RAG ranking.
-    #
+    # --------------------------------------------------------
+
     hw_path = (
         DATA
         / "pipe_data"
@@ -292,106 +273,120 @@ def load_criteria() -> list[Criterion]:
     )
 
     if hw_path.exists():
+
         hw = _load_json(hw_path)
 
-        sources = hw.get("sources", {})
+        sources = hw.get(
+            "sources",
+            {},
+        )
 
-        for record in hw.get("records", []):
-            preferred = record.get("preferred")
+        for rec in hw.get(
+            "records",
+            [],
+        ):
+
+            preferred = rec.get(
+                "preferred"
+            )
 
             if preferred is None:
                 continue
 
-            material = str(
-                record.get("material", "")
-            )
-
-            condition = str(
-                record.get("condition", "")
-            )
-
-            source_id = record.get(
+            source_id = rec.get(
                 "source",
                 "UNKNOWN",
             )
 
-            source = sources.get(
+            src = sources.get(
                 source_id,
                 {},
             )
 
-            criterion_id = (
-                "HW-C-"
-                + _norm(material).replace(" ", "-")
-                + "-"
-                + _norm(condition).replace(" ", "-")
+            cid = (
+                f"HW-C-"
+                f"{_norm(rec.get('material', '')).replace(' ', '-')}-"
+                f"{_norm(rec.get('condition', '')).replace(' ', '-')}"
             )
 
             if any(
-                c.criterion_id == criterion_id
-                for c in criteria
+                c.criterion_id == cid
+                for c in out
             ):
                 continue
 
-            criteria.append(
+            out.append(
                 Criterion(
-                    criterion_id=criterion_id,
+                    criterion_id=cid,
+
                     criterion_type=CriterionType.MATERIAL,
+
                     parameter="hazen_williams_c",
-                    value=float(preferred),
-                    unit="dimensionless",
-                    application="all",
-                    applicability=(
-                        f"{material} / {condition}"
+
+                    value=float(
+                        preferred
                     ),
+
+                    unit="dimensionless",
+
+                    application="all",
+
+                    applicability=(
+                        f"{rec.get('material')} / "
+                        f"{rec.get('condition')}"
+                    ),
+
                     source_reference_id=source_id,
+
                     source_status=str(
-                        record.get(
+                        rec.get(
                             "status",
                             "UNVERIFIED",
                         )
                     ),
+
                     edition_year=(
-                        str(source.get("year"))
-                        if source.get("year")
+                        str(src.get("year"))
+                        if src.get("year")
                         else None
                     ),
+
                     notes=(
                         "Registry value; governing "
-                        "project/AHJ criterion takes "
-                        "precedence."
+                        "project/AHJ criterion takes precedence."
                     ),
                 )
             )
 
-    return criteria
+    return out
 
 
 def load_chunks() -> list[dict[str, Any]]:
+
     path = (
         DATA
         / "corpus"
         / "chunks.jsonl"
     )
 
-    rows: list[dict[str, Any]] = []
+    rows = []
 
-    if not path.exists():
-        return rows
+    if path.exists():
 
-    for line in path.read_text(
-        encoding="utf-8"
-    ).splitlines():
+        for line in path.read_text(
+            encoding="utf-8"
+        ).splitlines():
 
-        if line.strip():
-            rows.append(
-                json.loads(line)
-            )
+            if line.strip():
+                rows.append(
+                    json.loads(line)
+                )
 
     return rows
 
 
 def load_sources() -> dict[str, dict[str, Any]]:
+
     path = (
         DATA
         / "sources"
@@ -402,19 +397,19 @@ def load_sources() -> dict[str, dict[str, Any]]:
         return {}
 
     return {
-        item["source_id"]: item
-        for item in _load_json(path)
+        x["source_id"]: x
+        for x in _load_json(path)
     }
 
 
 class RAGStore:
-    """
-    Local PumpDesign AI RAG store.
+    """Local RAG store.
 
-    Text knowledge is retrieved using TF-IDF/FAISS.
+    Uses FAISS when installed; otherwise a deterministic
+    TF-IDF cosine fallback is used for local testing.
 
-    Structured engineering data such as Hazen-Williams C
-    is retrieved directly from its engineering registry.
+    The returned engineering context is deliberately kept
+    compact because the LLM is not the numerical authority.
     """
 
     def __init__(
@@ -422,10 +417,13 @@ class RAGStore:
         *,
         top_k: int = 6,
     ):
+
         self.top_k = top_k
 
         self.criteria = load_criteria()
+
         self.chunks = load_chunks()
+
         self.sources = load_sources()
 
         self.vectorizer = None
@@ -435,6 +433,7 @@ class RAGStore:
         self._load_or_build_index()
 
     def _load_or_build_index(self):
+
         pkl = (
             INDEX
             / "tfidf_vectorizer.pkl"
@@ -446,6 +445,7 @@ class RAGStore:
         )
 
         if pkl.exists() and npy.exists():
+
             from scipy.sparse import load_npz
 
             self.vectorizer = pickle.loads(
@@ -465,7 +465,9 @@ class RAGStore:
         )
 
         if faiss_path.exists():
+
             try:
+
                 import faiss
 
                 self.faiss_index = (
@@ -475,29 +477,30 @@ class RAGStore:
                 )
 
             except Exception:
+
                 self.faiss_index = None
 
     def _build_tfidf(self):
-        from scipy.sparse import save_npz
+
         from sklearn.feature_extraction.text import (
             TfidfVectorizer,
         )
 
+        from scipy.sparse import save_npz
+
         texts = [
             (
-                f"{chunk.get('heading', '')} "
-                f"{chunk.get('text', '')} "
-                f"{' '.join(chunk.get('tags', []))}"
+                f"{c.get('heading', '')} "
+                f"{c.get('text', '')} "
+                f"{' '.join(c.get('tags', []))}"
             )
-            for chunk in self.chunks
+            for c in self.chunks
         ]
 
-        self.vectorizer = (
-            TfidfVectorizer(
-                ngram_range=(1, 2),
-                lowercase=True,
-                norm="l2",
-            )
+        self.vectorizer = TfidfVectorizer(
+            ngram_range=(1, 2),
+            lowercase=True,
+            norm="l2",
         )
 
         self.matrix = (
@@ -511,10 +514,12 @@ class RAGStore:
             exist_ok=True,
         )
 
-        (
+        pkl = (
             INDEX
             / "tfidf_vectorizer.pkl"
-        ).write_bytes(
+        )
+
+        pkl.write_bytes(
             pickle.dumps(
                 self.vectorizer
             )
@@ -533,10 +538,8 @@ class RAGStore:
 
         k = top_k or self.top_k
 
-        if not self.chunks:
-            return []
-
         if self.faiss_index is not None:
+
             q = (
                 self.vectorizer
                 .transform([query])
@@ -556,14 +559,15 @@ class RAGStore:
 
             return [
                 {
-                    **self.chunks[index],
+                    **self.chunks[i],
                     "score": float(
-                        scores[0][position]
+                        scores[0][j]
                     ),
                 }
-                for position, index
-                in enumerate(ids[0])
-                if index >= 0
+                for j, i in enumerate(
+                    ids[0]
+                )
+                if i >= 0
             ]
 
         q = self.vectorizer.transform(
@@ -580,34 +584,93 @@ class RAGStore:
 
         return [
             {
-                **self.chunks[index],
+                **self.chunks[i],
                 "score": float(
-                    scores[index]
+                    scores[i]
                 ),
             }
-            for index in order
-            if scores[index] > 0
+            for i in order
+            if scores[i] > 0
         ]
 
-    def _pipe_hazen_williams(
+    def _select_mandatory_criteria(
         self,
-        material: str | None,
+        criteria: list[Criterion],
+        selected: list[Criterion],
+        query: str,
+        limit: int,
     ) -> list[Criterion]:
+        """Keep the LLM context compact while retaining engineering-critical criteria."""
 
-        if not material:
-            return []
+        selected_ids = {
+            c.criterion_id
+            for c in selected
+        }
 
-        aliases = _material_aliases(
-            material
-        )
+        query_norm = _norm(query)
+
+        # ----------------------------------------------------
+        # 1. Keep one velocity criterion
+        # ----------------------------------------------------
+
+        velocity_candidates = [
+            c
+            for c in criteria
+            if c.criterion_type
+            == CriterionType.VELOCITY
+        ]
+
+        if velocity_candidates:
+
+            velocity_candidates.sort(
+                key=lambda c: (
+                    -len(
+                        set(
+                            query_norm.split()
+                        )
+                        & set(
+                            _norm(
+                                f"{c.parameter} "
+                                f"{c.applicability} "
+                                f"{c.notes or ''}"
+                            ).split()
+                        )
+                    ),
+                    c.criterion_id,
+                )
+            )
+
+            best_velocity = (
+                velocity_candidates[0]
+            )
+
+            if (
+                best_velocity.criterion_id
+                not in selected_ids
+            ):
+
+                if len(selected) >= limit:
+                    selected.pop()
+
+                selected.append(
+                    best_velocity
+                )
+
+                selected_ids.add(
+                    best_velocity.criterion_id
+                )
+
+        # ----------------------------------------------------
+        # 2. Keep one Hazen-Williams C criterion
+        # ----------------------------------------------------
 
         hw_candidates = [
-            criterion
-            for criterion in self.criteria
+            c
+            for c in criteria
             if (
-                criterion.criterion_type
+                c.criterion_type
                 == CriterionType.MATERIAL
-                and criterion.parameter.lower()
+                and c.parameter.lower()
                 in {
                     "hazen_williams_c",
                     "hazen_williams_c_value",
@@ -615,51 +678,73 @@ class RAGStore:
             )
         ]
 
-        matched = [
-            criterion
-            for criterion in hw_candidates
-            if any(
-                alias
-                in _norm(
-                    criterion.applicability
+        if hw_candidates:
+
+            def hw_score(
+                c: Criterion,
+            ) -> tuple[int, int, int, str]:
+
+                text = _norm(
+                    f"{c.applicability} "
+                    f"{c.notes or ''}"
                 )
-                for alias in aliases
+
+                overlap = len(
+                    set(
+                        query_norm.split()
+                    )
+                    & set(
+                        text.split()
+                    )
+                )
+
+                primary = (
+                    1
+                    if "PRIMARY"
+                    in c.source_status.upper()
+                    else 0
+                )
+
+                new_pipe = (
+                    1
+                    if "new"
+                    in c.applicability.lower()
+                    else 0
+                )
+
+                return (
+                    overlap,
+                    primary,
+                    new_pipe,
+                    c.criterion_id,
+                )
+
+            hw_candidates.sort(
+                key=hw_score,
+                reverse=True,
             )
-        ]
 
-        if not matched:
-            return []
+            best_hw = (
+                hw_candidates[0]
+            )
 
-        # Primary engineering references take precedence
-        # over secondary references.
-        primary = [
-            criterion
-            for criterion in matched
-            if "PRIMARY"
-            in criterion.source_status.upper()
-        ]
+            if (
+                best_hw.criterion_id
+                not in selected_ids
+            ):
 
-        if primary:
-            matched = primary
+                if len(selected) >= limit:
+                    selected.pop()
 
-        # Prefer the normal "new" condition where it is
-        # explicitly represented in the registry.
-        new_records = [
-            criterion
-            for criterion in matched
-            if "new"
-            in criterion.applicability.lower()
-        ]
+                selected.append(
+                    best_hw
+                )
 
-        if len(new_records) == 1:
-            return new_records
+        # ----------------------------------------------------
+        # 3. Final hard cap
+        # ----------------------------------------------------
 
-        if len(matched) == 1:
-            return matched
-
-        # Do not silently choose between genuinely
-        # different applicable conditions.
-        return matched
+        return selected[:limit]
 
     def retrieve(
         self,
@@ -667,7 +752,6 @@ class RAGStore:
         *,
         application: str | None = None,
         jurisdiction: str | None = None,
-        material: str | None = None,
         top_k: int | None = None,
     ) -> dict[str, Any]:
 
@@ -675,23 +759,21 @@ class RAGStore:
             application or ""
         ).lower()
 
-        # -----------------------------------------------------------
-        # 1. Retrieve only a small number of textual RAG chunks.
-        # -----------------------------------------------------------
         chunks = self._search_chunks(
             query,
             top_k,
         )
 
-        # -----------------------------------------------------------
-        # 2. Filter general engineering criteria.
-        # -----------------------------------------------------------
-        applicable: list[Criterion] = []
+        # ----------------------------------------------------
+        # Filter criteria by application
+        # ----------------------------------------------------
 
-        for criterion in self.criteria:
+        criteria = []
+
+        for c in self.criteria:
 
             capp = (
-                criterion.application
+                c.application
                 or "all"
             ).lower()
 
@@ -711,45 +793,27 @@ class RAGStore:
             ):
                 continue
 
-            # Do not send unrelated pipe-condition
-            # Hazen-Williams records through the normal
-            # general-criteria ranking.
-            if (
-                criterion.parameter.lower()
-                in {
-                    "hazen_williams_c",
-                    "hazen_williams_c_value",
-                }
-                and material
-            ):
-                continue
+            criteria.append(c)
 
-            applicable.append(
-                criterion
-            )
+        # ----------------------------------------------------
+        # Rank criteria by lexical relevance
+        # ----------------------------------------------------
 
-        # -----------------------------------------------------------
-        # 3. Rank general criteria by lexical relevance.
-        # -----------------------------------------------------------
+        qnorm = _norm(query)
+
         tokens = set(
-            _norm(query).split()
+            qnorm.split()
         )
 
-        ranked: list[
-            tuple[int, Criterion]
-        ] = []
+        ranked = []
 
-        for criterion in applicable:
+        for c in criteria:
 
             text = _norm(
-                " ".join(
-                    [
-                        criterion.criterion_id,
-                        criterion.parameter,
-                        criterion.applicability,
-                        criterion.notes or "",
-                    ]
-                )
+                f"{c.criterion_id} "
+                f"{c.parameter} "
+                f"{c.applicability} "
+                f"{c.notes or ''}"
             )
 
             overlap = len(
@@ -761,96 +825,98 @@ class RAGStore:
             ranked.append(
                 (
                     overlap,
-                    criterion,
+                    c,
                 )
             )
 
         ranked.sort(
-            key=lambda item: (
-                -item[0],
-                item[1].criterion_id,
+            key=lambda x: (
+                -x[0],
+                x[1].criterion_id,
             )
         )
 
-        # -----------------------------------------------------------
-        # 4. Keep only a small general-criteria payload.
-        #
-        # top_k=6 now actually means approximately six
-        # general criteria instead of forcing twelve.
-        # -----------------------------------------------------------
+        # ----------------------------------------------------
+        # IMPORTANT:
+        # Never send more than the configured compact
+        # engineering context.
+        # ----------------------------------------------------
+
         limit = min(
-            top_k or self.top_k,
             6,
+            max(
+                4,
+                top_k or self.top_k,
+            ),
         )
 
         selected = [
-            criterion
-            for score, criterion
-            in ranked
+            c
+            for score, c in ranked
             if score > 0
         ][:limit]
 
-        # If lexical matching is weak, retain the most
-        # relevant available criteria, but still obey
-        # the payload limit.
-        if not selected:
-            selected = [
-                criterion
-                for _, criterion
-                in ranked[:limit]
-            ]
+        # ----------------------------------------------------
+        # If lexical matching is weak, fill the remaining
+        # slots with application criteria.
+        # ----------------------------------------------------
 
-        # -----------------------------------------------------------
-        # 5. Add ONLY the structured pipe criterion required
-        # for the selected material.
-        # -----------------------------------------------------------
-        pipe_hw = (
-            self._pipe_hazen_williams(
-                material
+        if len(selected) < limit:
+
+            selected_ids = {
+                c.criterion_id
+                for c in selected
+            }
+
+            for c in criteria:
+
+                if (
+                    c.criterion_id
+                    not in selected_ids
+                ):
+
+                    selected.append(c)
+
+                    selected_ids.add(
+                        c.criterion_id
+                    )
+
+                if len(selected) >= limit:
+                    break
+
+        # ----------------------------------------------------
+        # Always retain the engineering-critical criteria
+        # required by the deterministic workflows.
+        # ----------------------------------------------------
+
+        selected = (
+            self._select_mandatory_criteria(
+                criteria,
+                selected,
+                query,
+                limit,
             )
-            if material
-            else []
         )
 
-        selected_ids = {
-            criterion.criterion_id
-            for criterion in selected
-        }
-
-        for criterion in pipe_hw:
-            if (
-                criterion.criterion_id
-                not in selected_ids
-            ):
-                selected.append(
-                    criterion
-                )
-
-                selected_ids.add(
-                    criterion.criterion_id
-                )
-
-        # -----------------------------------------------------------
-        # 6. Keep the response compact.
-        #
-        # The LLM receives criteria only through the retriever,
-        # not the full RAG chunk text.
-        # -----------------------------------------------------------
         return {
             "criteria": [
-                criterion.model_dump(
+                c.model_dump(
                     mode="json"
                 )
-                for criterion in selected
+                for c in selected
             ],
+
             "chunks": chunks,
+
             "references": [
                 self.sources[
-                    criterion.source_reference_id
+                    c.source_reference_id
                 ]
-                for criterion in selected
+
+                for c in selected
+
                 if (
-                    criterion.source_reference_id
+                    c.source_reference_id
                     in self.sources
                 )
             ],
@@ -863,7 +929,6 @@ class RAGStore:
         service: str | None = None,
         jurisdiction: str | None = None,
         query: str = "engineering criteria",
-        material: str | None = None,
     ) -> list[Criterion]:
 
         result = self.retrieve(
@@ -875,14 +940,11 @@ class RAGStore:
             ),
             application=application,
             jurisdiction=jurisdiction,
-            material=material,
         )
 
         return [
-            Criterion.model_validate(
-                item
-            )
-            for item in result["criteria"]
+            Criterion.model_validate(x)
+            for x in result["criteria"]
         ]
 
     def retriever(
@@ -892,7 +954,6 @@ class RAGStore:
         service: str | None = None,
         jurisdiction: str | None = None,
         query: str = "engineering criteria",
-        material: str | None = None,
     ) -> list[Criterion]:
 
         return self.retrieve_criteria(
@@ -900,5 +961,4 @@ class RAGStore:
             service=service,
             jurisdiction=jurisdiction,
             query=query,
-            material=material,
         )
